@@ -1,0 +1,854 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Shortlist</title>
+<style>[hidden]{display:none!important}</style>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#3535A0">
+<link rel="icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Hanken+Grotesk:wght@400;500;600&display=swap">
+<style>
+/* Layout: sticky capture header; collection tiles and a shortlist rail on top of an image-led grid; list view for places and food; detail sheet and side-by-side compare. */
+:root{
+  --bg:#F4F3F8; --surface:#FFFFFF; --ink:#1A1930; --muted:#66657D; --line:#E1DFEB;
+  --accent:#3535A0; --accent-ink:#FFFFFF; --accent-soft:#E8E8FA;
+  --gold:#8A5A00; --gold-soft:#FCEFD0; --star:#E9A21A;
+  --good:#1E7A4E; --good-soft:#DDF1E6; --bad:#A63A3A; --bad-soft:#F7E0E0;
+  --tile-s:55%; --tile-l1:90%; --tile-l2:82%; --tile-ink:32%;
+  --shadow:0 1px 2px rgba(26,25,48,.06),0 10px 28px rgba(26,25,48,.08);
+  --f-display:'Bricolage Grotesque','Helvetica Neue',Arial,sans-serif;
+  --f-body:'Hanken Grotesk',system-ui,-apple-system,'Segoe UI',sans-serif;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#12111C; --surface:#1B1A2A; --ink:#EEEDF8; --muted:#9A99B3; --line:#2C2B42;
+  --accent:#A3A6FF; --accent-ink:#12111C; --accent-soft:#272849;
+  --gold:#F0B94C; --gold-soft:#3A2F14; --star:#F4B83A;
+  --good:#6CD19B; --good-soft:#173326; --bad:#F08A8A; --bad-soft:#3A1D1D;
+  --tile-s:32%; --tile-l1:26%; --tile-l2:19%; --tile-ink:78%;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px rgba(0,0,0,.4); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12111C; --surface:#1B1A2A; --ink:#EEEDF8; --muted:#9A99B3; --line:#2C2B42;
+  --accent:#A3A6FF; --accent-ink:#12111C; --accent-soft:#272849;
+  --gold:#F0B94C; --gold-soft:#3A2F14; --star:#F4B83A;
+  --good:#6CD19B; --good-soft:#173326; --bad:#F08A8A; --bad-soft:#3A1D1D;
+  --tile-s:32%; --tile-l1:26%; --tile-l2:19%; --tile-ink:78%;
+  --shadow:0 1px 2px rgba(0,0,0,.45),0 10px 28px rgba(0,0,0,.4); color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.45}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.wrap{max-width:1280px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 96px}
+
+/* header */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:12px 12px;display:grid;gap:10px;border-bottom:1px solid var(--line)}
+.brandrow{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.mark{font-family:var(--f-display);font-weight:700;font-size:27px;letter-spacing:-.03em;margin:0 6px 0 0;line-height:1}
+.views{display:flex;gap:2px;background:var(--surface);border:1px solid var(--line);border-radius:999px;padding:3px}
+.views button{border:0;background:none;padding:5px 14px;border-radius:999px;color:var(--muted);font-weight:500}
+.views button.on{background:var(--ink);color:var(--bg)}
+.spacer{flex:1}
+.pillbtn{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-weight:500;font-size:13px}
+.pillbtn.warn{background:var(--gold-soft);color:var(--gold);border-color:transparent;font-weight:600}
+.iconbtn{width:34px;height:34px;padding:0;display:grid;place-items:center;font-size:16px}
+.add{display:flex;gap:8px;align-items:stretch}
+.add .box{flex:1;min-width:0;display:flex;gap:8px}
+.add input,.search input{width:100%;min-width:0;border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:11px 14px}
+.add #addUrl{flex:2}
+.add #addNote{flex:1.2;display:none}
+.add.has #addNote{display:block}
+.add button{border:0;background:var(--accent);color:var(--accent-ink);border-radius:12px;padding:0 22px;font-weight:600}
+.add button:disabled{opacity:.5;cursor:default}
+.search{position:relative}
+.search input{padding:9px 14px 9px 38px;border-radius:999px}
+.search:before{content:"";position:absolute;left:14px;top:50%;width:11px;height:11px;margin-top:-8px;border:2px solid var(--muted);border-radius:50%}
+.search:after{content:"";position:absolute;left:25px;top:50%;width:6px;height:2px;margin-top:5px;background:var(--muted);transform:rotate(45deg)}
+@media (max-width:640px){.top{position:static}.brandrow{row-gap:8px}.add.has{flex-wrap:wrap}.add.has .box{flex-wrap:wrap;flex-basis:100%}.add.has #addNote{flex-basis:100%}.add.has button{padding:11px 22px;flex:1}}
+
+/* panels */
+.panel{margin-top:14px;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;gap:14px}
+.panel h2{margin:0;font-family:var(--f-display);font-size:17px}
+.panel.gold{background:var(--gold-soft);border-color:transparent}
+.panel.gold h2{color:var(--gold)}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:16px}
+.cols>div{display:grid;gap:8px;align-content:start;min-width:0}
+.cols h3{margin:0;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.cols ol{margin:0;padding-left:18px;display:grid;gap:4px;font-size:14px}
+.copyrow{display:flex;gap:8px;align-items:stretch;min-width:0}
+.copyrow code{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:7px 10px;font-size:12px;overflow-x:auto;white-space:nowrap;user-select:all}
+.copyrow button{border:0;background:var(--accent);color:var(--accent-ink);border-radius:8px;padding:0 14px;font-weight:600}
+.irow{display:flex;gap:10px;align-items:center;background:var(--surface);border-radius:8px;padding:6px 10px;min-width:0}
+.irow a{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);text-decoration:none;font-size:13px}
+.irow .n{color:var(--muted);font-size:12px;max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.irow button{border:0;background:none;color:var(--muted);font-size:18px;line-height:1;padding:2px 6px}
+.fine{font-size:12px;color:var(--muted)}
+
+/* chips and filters */
+main{display:grid;gap:14px;padding-top:14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.chip{border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:6px 13px;font-weight:500;white-space:nowrap}
+.chip .c{color:var(--muted);font-variant-numeric:tabular-nums;margin-left:6px;font-weight:400}
+.chip.on{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.chip.on .c{color:inherit;opacity:.75}
+.tops{overflow-x:auto;flex-wrap:nowrap;padding-bottom:2px;scrollbar-width:none}
+.tops::-webkit-scrollbar{display:none}
+.tops .chip{font-family:var(--f-display);font-size:15px}
+.subs .chip{font-size:13px;padding:4px 11px}
+.crumb{border:0;background:none;color:var(--muted);padding:2px 0;font-size:13px}
+.crumb:hover{color:var(--ink)}
+.sep{color:var(--line)}
+.filters{display:flex;gap:10px 12px;flex-wrap:wrap;align-items:center;justify-content:space-between}
+.fgroup{display:flex;gap:8px;flex-wrap:wrap;align-items:center;min-width:0}
+.seg{display:flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:none;padding:5px 12px;font-size:13px;color:var(--muted)}
+.seg button.on{background:var(--accent-soft);color:var(--accent);font-weight:600}
+.fgroup select{border:1px solid var(--line);background:var(--surface);border-radius:10px;padding:5px 8px;font-size:13px}
+.tgl{display:flex;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.tag-x{border:1px solid var(--accent);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:3px 10px;font-size:13px}
+.occ{display:flex;gap:8px;overflow-x:auto;scrollbar-width:none;padding-bottom:2px}
+.occ::-webkit-scrollbar{display:none}
+.occ .chip{font-size:13px;padding:4px 11px}
+.sec{display:flex;align-items:baseline;gap:10px;margin:8px 0 -2px}
+.sec h2{margin:0;font-family:var(--f-display);font-size:19px;letter-spacing:-.01em}
+.sec .fine{margin-left:auto}
+
+/* tiles */
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:14px}
+@media (max-width:520px){.tiles{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}}
+.coll{border:0;background:none;padding:0;text-align:left;display:grid;gap:8px;min-width:0}
+.collage{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;gap:3px;aspect-ratio:1.25;border-radius:16px;overflow:hidden;background:var(--line);box-shadow:var(--shadow);transition:transform .2s}
+.collage.one{grid-template-columns:1fr;grid-template-rows:1fr}
+.collage.two{grid-template-rows:1fr}
+.collage.three>:first-child{grid-row:span 2}
+.coll:hover .collage{transform:translateY(-2px)}
+.cell{position:relative;overflow:hidden;min-height:0}
+.cell,.pw,.rthumb,.mini .p,.ctab .ph,.shimg{container-type:size}
+.embedbox iframe{width:100%;height:560px;border:0;border-radius:14px;margin-top:10px;background:var(--surface)}
+.sp{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:max(100cqw,80cqh);aspect-ratio:4/5;background-size:500% 500%;background-repeat:no-repeat}
+.cell img{width:100%;height:100%;object-fit:cover;display:block;position:absolute;inset:0}
+.coll b{font-family:var(--f-display);font-size:17px;font-weight:700;line-height:1.15}
+.coll span.s{color:var(--muted);font-size:13px}
+
+/* tiles for items with no photo */
+.tile{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:44px;letter-spacing:-.02em;
+  color:hsl(var(--h) 45% var(--tile-ink));background:linear-gradient(150deg,hsl(var(--h) var(--tile-s) var(--tile-l1)),hsl(calc(var(--h) + 34) var(--tile-s) var(--tile-l2)))}
+
+/* grid */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:22px 16px}
+@media (max-width:520px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 10px}}
+.card{display:flex;flex-direction:column;gap:10px;min-width:0;cursor:pointer;border-radius:14px}
+.pw{position:relative;aspect-ratio:4/5;max-width:100%;border-radius:14px;overflow:hidden;background:var(--accent-soft);box-shadow:var(--shadow);transition:transform .2s,box-shadow .2s}
+.card:hover .pw{transform:translateY(-3px)}
+.pw img{width:100%;height:100%;object-fit:cover;display:block}
+.sel .pw{outline:3px solid var(--accent);outline-offset:-3px}
+.pills{position:absolute;left:8px;top:8px;display:flex;gap:5px;flex-wrap:wrap;max-width:calc(100% - 52px)}
+.pill{font-size:11px;font-weight:600;border-radius:999px;padding:2px 9px;background:var(--surface);color:var(--ink);letter-spacing:.02em}
+.pill.out{background:var(--bad-soft);color:var(--bad)}
+.pill.dn{background:var(--good-soft);color:var(--good)}
+.star{position:absolute;right:8px;top:8px;width:32px;height:32px;border-radius:50%;border:0;background:var(--surface);color:var(--muted);font-size:16px;line-height:1;display:grid;place-items:center;box-shadow:0 2px 8px rgba(0,0,0,.18)}
+.star.on{color:var(--star)}
+.tick{position:absolute;right:8px;bottom:8px;width:28px;height:28px;border-radius:50%;border:2px solid #fff;background:rgba(0,0,0,.28);color:#fff;display:grid;place-items:center;font-weight:700}
+.tick.on{background:var(--accent);color:var(--accent-ink)}
+.meta{display:grid;gap:2px;min-width:0}
+.brand{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.title{font-family:var(--f-display);font-weight:500;font-size:16px;line-height:1.25;text-wrap:balance;overflow-wrap:anywhere}
+.price{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap;font-variant-numeric:tabular-nums}
+.price b{font-weight:600}
+.price s{color:var(--muted);font-size:13px}
+.price i{font-style:normal;color:var(--good);font-size:12px;font-weight:600}
+.sub{color:var(--muted);font-size:13px}
+.rail{display:flex;gap:14px;overflow-x:auto;padding:2px 2px 10px;scroll-snap-type:x proximity}
+.rail .card{flex:0 0 168px;scroll-snap-align:start}
+
+/* list layout */
+.rows{display:grid;gap:8px}
+.row{display:grid;grid-template-columns:60px minmax(0,1fr) auto;gap:14px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px 12px 8px 8px;cursor:pointer}
+.row:hover{border-color:var(--accent)}
+.row.sel{outline:2px solid var(--accent)}
+.rthumb{position:relative;width:60px;aspect-ratio:4/5;border-radius:9px;overflow:hidden;background:var(--accent-soft)}
+.rthumb img{width:100%;height:100%;object-fit:cover;display:block}
+.rthumb .tile{font-size:24px}
+.rend{display:flex;align-items:center;gap:10px;text-align:right}
+.rend .star{position:static;box-shadow:none;border:1px solid var(--line)}
+
+.more-btn{display:block;margin:18px auto 0;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:10px 22px;font-weight:600}
+.linkrow{display:flex;gap:8px;flex-wrap:wrap}
+.ghost{border:1px solid var(--line);background:none;border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink);text-decoration:none;text-align:left;max-width:100%;overflow-wrap:anywhere}
+.kids{display:grid;gap:6px}
+.kid{display:grid;gap:1px;text-align:left;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:8px 10px;min-width:0}
+.kid b{font-weight:600;font-size:14px;overflow-wrap:anywhere}
+.empty{grid-column:1/-1;border:1px dashed var(--line);border-radius:16px;padding:40px 20px;text-align:center;color:var(--muted)}
+.empty h3{font-family:var(--f-display);color:var(--ink);margin:0 0 6px;font-size:19px}
+.skel{aspect-ratio:4/5;border-radius:14px;background:var(--line);animation:pulse 1.2s ease-in-out infinite alternate}
+@keyframes pulse{from{opacity:.45}to{opacity:1}}
+
+/* brands */
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(270px,1fr));gap:14px}
+.bcard{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:12px 12px 16px;display:grid;gap:6px;align-content:start;min-width:0}
+.strip{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;height:104px;border-radius:10px;overflow:hidden;margin-bottom:6px;background:var(--line)}
+.strip .cell{min-height:0}
+.bcard h3{margin:0;font-family:var(--f-display);font-size:19px;font-weight:700;padding:0 4px}
+.bcard .sub,.bcard p{padding:0 4px}
+.bcard .sub a{color:var(--accent)}
+.bcard p{margin:0;font-size:13px}
+.bcard .tag-x{justify-self:start;margin:4px 4px 0}
+
+/* sheet */
+#scrim{position:fixed;inset:0;background:rgba(8,8,18,.55);z-index:10}
+#sheet{position:fixed;top:0;right:0;bottom:0;width:min(480px,100%);z-index:11;background:var(--surface);box-shadow:-14px 0 44px rgba(0,0,0,.3);overflow-y:auto;overscroll-behavior:contain;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);padding-right:env(safe-area-inset-right,0px);animation:slidein .26s ease-out}
+@keyframes slidein{from{transform:translateX(28px)}}
+@keyframes slideup{from{transform:translateY(40px)}}
+@media (max-width:640px){.shimg{max-height:42vh}#sheet{top:5vh;left:0;width:100%;border-radius:22px 22px 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.35);animation-name:slideup}}
+.sh{padding:12px max(16px,env(safe-area-inset-left,0px)) 32px 16px;display:grid;gap:16px;grid-template-columns:minmax(0,1fr)}
+.grab{display:none;width:42px;height:4px;border-radius:4px;background:var(--line);margin:0 auto -4px}
+@media (max-width:640px){.grab{display:block}}
+.sh-top{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.sh-top .nav{display:flex;gap:6px}
+.sq{border:1px solid var(--line);background:none;border-radius:999px;width:34px;height:34px;font-size:17px;line-height:1;display:grid;place-items:center}
+.sq:disabled{opacity:.35;cursor:default}
+.shimg{position:relative;border-radius:16px;overflow:hidden;aspect-ratio:4/5;max-height:54vh;width:100%;background:var(--accent-soft)}
+.shimg img{width:100%;height:100%;object-fit:cover;display:block}
+.shimg .tile{font-size:80px}
+.sh h2{font-family:var(--f-display);font-size:24px;line-height:1.15;letter-spacing:-.01em;margin:2px 0 0;text-wrap:balance}
+.lbl{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600;margin-bottom:6px}
+.go{display:block;text-decoration:none;background:var(--accent);color:var(--accent-ink);padding:12px 16px;border-radius:12px;font-weight:600;text-align:center}
+.facts{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:14px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0;overflow-wrap:anywhere}
+.facts .full{grid-column:1/-1}
+.sh textarea,.sh input[type=text]{width:100%;border:1px solid var(--line);background:var(--bg);border-radius:10px;padding:9px 11px;min-width:0}
+.sh textarea{min-height:80px;resize:vertical}
+.danger{border:0;background:none;color:var(--bad);text-align:left;padding:4px 0;font-weight:500}
+.more{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}
+.mini{flex:0 0 92px;border:0;background:none;padding:0;text-align:left;display:grid;gap:4px;min-width:0}
+.mini .p{position:relative;aspect-ratio:4/5;border-radius:10px;overflow:hidden;background:var(--accent-soft)}
+.mini .p img{width:100%;height:100%;object-fit:cover;display:block}
+.mini .p .tile{font-size:26px}
+.mini span{font-size:12px;line-height:1.25;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+
+/* compare */
+#cmpbar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(16px + env(safe-area-inset-bottom,0px));z-index:9;display:flex;gap:10px;align-items:center;background:var(--ink);color:var(--bg);border-radius:999px;padding:8px 8px 8px 18px;box-shadow:var(--shadow);max-width:calc(100% - 32px);animation:slideup .2s ease-out}
+#cmpbar button{border:0;border-radius:999px;padding:8px 16px;font-weight:600}
+#cmpbar .go2{background:var(--accent);color:var(--accent-ink)}
+#cmpbar .go2:disabled{opacity:.45}
+#cmpbar .x2{background:transparent;color:inherit;opacity:.8}
+#cmp{position:fixed;inset:0;z-index:12;background:var(--bg);overflow:auto;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(24px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+#cmp .hd{display:flex;align-items:center;justify-content:space-between;max-width:1280px;margin:0 auto 14px}
+#cmp h2{margin:0;font-family:var(--f-display);font-size:22px}
+.ctab{border-collapse:separate;border-spacing:0;margin:0 auto;min-width:100%}
+.cwrap{max-width:1280px;margin:0 auto;overflow-x:auto;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.ctab th,.ctab td{padding:12px 14px;text-align:left;vertical-align:top;font-size:14px;border-bottom:1px solid var(--line);min-width:180px;overflow-wrap:anywhere}
+.ctab th.l{position:sticky;left:0;background:var(--surface);min-width:96px;max-width:110px;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);z-index:1}
+.ctab tr:last-child>*{border-bottom:0}
+.ctab .ph{width:150px;aspect-ratio:4/5;border-radius:10px;overflow:hidden;position:relative;background:var(--accent-soft)}
+.ctab .ph img{width:100%;height:100%;object-fit:cover;display:block}
+.ctab .best{color:var(--good);font-weight:600}
+.ctab a{color:var(--accent)}
+
+#toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:10px;font-size:14px;z-index:20;opacity:0;pointer-events:none;transition:opacity .2s;max-width:calc(100% - 32px)}
+body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
+#toast.show{opacity:1}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brandrow">
+      <h1 class="mark">Shortlist</h1>
+      <nav class="views" aria-label="View"><button id="vItems" class="on" type="button">Saved</button><button id="vBrands" type="button">Brands</button></nav>
+      <span class="spacer"></span>
+      <button id="inboxBtn" class="pillbtn warn" type="button" hidden></button>
+      <button id="capBtn" class="pillbtn" type="button" aria-expanded="false">Add from anywhere</button>
+      <button id="themeBtn" class="pillbtn iconbtn" type="button" aria-label="Switch light or dark">◐</button>
+    </div>
+    <form id="addForm" class="add" autocomplete="off">
+      <div class="box">
+        <input id="addUrl" type="text" inputmode="url" placeholder="Paste a link to save (several at once is fine)" aria-label="Link to save">
+        <input id="addNote" type="text" placeholder="Note: Diwali, Bandra, for mom (optional)" aria-label="Note for these links">
+      </div>
+      <button id="addBtn" type="submit">Save</button>
+    </form>
+    <div class="search"><input id="q" type="search" placeholder="Search your list" aria-label="Search"></div>
+  </header>
+  <section id="capPanel" class="panel" hidden></section>
+  <section id="inboxPanel" class="panel gold" hidden></section>
+  <main>
+    <div id="tops" class="chips tops"></div>
+    <div id="subs" class="chips subs"></div>
+    <div id="filters" class="filters"></div>
+    <div id="occ" class="occ"></div>
+    <div id="body"></div>
+  </main>
+</div>
+<div id="cmpbar" hidden></div>
+<div id="cmp" hidden></div>
+<div id="scrim" hidden></div>
+<aside id="sheet" hidden aria-label="Details"></aside>
+<div id="toast" role="status"></div>
+
+<script type="module">
+import { boot, SHEET_BASE } from './supa.js';
+(async function () {
+  const TOPS = ['Wear', 'Home & Decor', 'Gifts', 'Eat & Drink', 'Places & Stays', 'Ideas & Tips', 'Kids', 'Services & Vendors', 'Art', 'Games & Fun', 'Music & Artists', 'Beauty', 'Tech', 'Other'];
+  const GO_TOPS = ['Eat & Drink', 'Places & Stays'];
+  const TIP_TOPS = ['Ideas & Tips'];
+  const BANDS = [['u5', 'Under ₹5k', 0, 5000], ['5', '₹5k to ₹10k', 5000, 10000], ['10', '₹10k to ₹20k', 10000, 20000], ['20', '₹20k and up', 20000, Infinity]];
+  /* replaceChildren takes nodes, not arrays: let it accept nested lists and skip empty slots */
+  const rc = Element.prototype.replaceChildren;
+  Element.prototype.replaceChildren = function (...k) { return rc.apply(this, k.flat(Infinity).filter(c => c != null && c !== false)); };
+  const $ = s => document.querySelector(s);
+  const slug = s => String(s || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const fmt = n => n == null ? '' : '₹' + Math.round(n).toLocaleString('en-IN');
+  const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch (e) { return u || ''; } };
+  const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : null;
+  const hue = s => { let h = 7; for (const c of String(s || '?')) h = (h * 31 + c.charCodeAt(0)) % 360; return h; };
+  const imgOf = i => i.image && (/^(https?:|data:|sp:|img:)/.test(i.image) || i.image.charAt(0) === '/') ? i.image : null;
+  const dateOf = s => s ? new Date(s).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '';
+
+  function el(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    if (props) for (const k in props) {
+      const v = props[k];
+      if (v == null || v === false) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'text') e.textContent = v;
+      else if (k.startsWith('on')) e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v === true ? '' : v);
+    }
+    for (const c of kids.flat(Infinity)) { if (c == null || c === false) continue; e.append(c.nodeType ? c : document.createTextNode(c)); }
+    return e;
+  }
+  /* photo, or a generated colour tile with the initial when there is none */
+  function vis(i) {
+    const src = imgOf(i);
+    if (src && src.slice(0, 3) === 'sp:') { /* sprite cell: sp:<url>|<col>|<row> on a 5x5 sheet of 4:5 cells */
+      const p = src.slice(3).split('|');
+      return el('span', { class: 'sp', style: 'background-image:url(' + SHEET_BASE + p[0] + '.jpg);background-position:' + (p[1] * 25) + '% ' + (p[2] * 25) + '%' });
+    }
+    if (src && src.slice(0, 4) === 'img:') return el('img', { src: SHEET_BASE + 'img-' + src.slice(4) + '.jpg', alt: '', loading: 'lazy' });
+    if (src) return el('img', { src, alt: '', loading: 'lazy' });
+    return el('span', { class: 'tile', style: '--h:' + hue(i.brand || i.title), text: ((i.brand || i.title || '?').trim()[0] || '?').toUpperCase() });
+  }
+
+  /* the real Instagram post, shown on demand inside the sheet (no stored photo needed) */
+  function igEmbed(i) {
+    const m = i.src === 'ig' && !i.parent && /instagram\.com\/(p|reel|tv)\/([\w-]+)/.exec(i.url || '');
+    if (!m) return null;
+    const box = el('div', { class: 'embedbox' });
+    const btn = el('button', { type: 'button', class: 'pillbtn', text: 'Show the post here', onclick: () => {
+      if (box.firstChild) { box.replaceChildren(); btn.textContent = 'Show the post here'; return; }
+      box.append(el('iframe', { src: 'https://www.instagram.com/' + m[1] + '/' + m[2] + '/embed/', loading: 'lazy', allowtransparency: 'true', scrolling: 'no', title: 'Instagram post' }));
+      btn.textContent = 'Hide post';
+    } });
+    return el('div', null, btn, box);
+  }
+
+  let toastT;
+  function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 3200); }
+
+  let db = null, user = null, myId = null, canWrite = true;
+  try { const b = await boot(); if (b) { db = b.db; user = b.user; myId = b.id; } } catch (e) { console.error(e); }
+
+  let items = [], manual = [], ig = [], ov = new Map(), pend = {}, inbox = [], brandDocs = [], loaded = false, captureEmail = '';
+  /* saved Instagram posts live in shards (igshards); a person's edits to them live in ov/<id> and win over the shard */
+  function rebuild() {
+    const all = manual.concat(ig), out = [];
+    for (const i of all) { const o = ov.get(i.id); const m = o ? Object.assign({}, i, o) : i; if (!m.hidden) out.push(m); }
+    items = out;
+  }
+  const view = { src: '', limit: 60, allBrands: false, fkey: '', tab: 'items', top: null, sub: [], q: '', occ: null, status: 'open', stockOnly: false, sort: 'new', brand: null, band: null, layout: 'grid',
+    sheet: null, inboxOpen: false, capOpen: false, compare: false, cmp: new Set(), cmpOpen: false, order: [] };
+
+  const root = document.documentElement;
+  try { const t = localStorage.getItem('sl-theme'); if (t === 'dark' || t === 'light') root.setAttribute('data-theme', t); } catch (e) {}
+  try { const l = localStorage.getItem('sl-layout'); if (l === 'list' || l === 'grid') view.layout = l; } catch (e) {}
+
+  function norm(id, d) {
+    return Object.assign({ title: 'Untitled', status: 'want', occasions: [], tags: [], facts: [] }, d, { id, path: Array.isArray(d.path) && d.path.length ? d.path : ['Other'] });
+  }
+
+  /* ---------- data ---------- */
+  const chains = {};
+  function upd(id, patch) {
+    if (!db) return;
+    chains[id] = (chains[id] || Promise.resolve()).then(() => {
+        if (id.startsWith('ig-')) { pend[id] = Object.assign({}, pend[id] || ov.get(id) || {}, patch); return db.doc('ov/' + id).set(pend[id]); }
+        return db.doc('items/' + id).update(patch);
+      })
+      .catch(e => toast(e && e.code === 'invalid_argument' ? 'Could not save. You may have view-only access.' : 'Could not save. Try again.'));
+    return chains[id];
+  }
+  function extractUrls(text) {
+    const found = (text.match(/https?:\/\/[^\s,]+/gi) || []);
+    if (found.length) return [...new Set(found)];
+    const t = text.trim();
+    if (t && !/\s/.test(t) && /\.[a-z]{2,}/i.test(t)) return ['https://' + t];
+    return [];
+  }
+  async function addLinks(text, note) {
+    const urls = extractUrls(text);
+    if (!urls.length) { toast('No link found. Paste a full web address.'); return false; }
+    try {
+      for (const url of urls) await db.collection('inbox').add({ url, note: note || '', addedBy: myId, addedAt: new Date().toISOString() });
+      toast(urls.length === 1 ? 'Saved. It will be sorted on the next pass.' : urls.length + ' links saved for sorting.');
+      return true;
+    } catch (e) { toast('Could not save. You may have view-only access.'); return false; }
+  }
+
+  /* ---------- filtering ---------- */
+  const STATUS_OPEN = ['want', 'shortlist'];
+  function matchQ(i, q) {
+    if (!q) return true;
+    const hay = [i.title, i.brand, i.owner || '', i.notes, i.path.join(' '), i.occasions.join(' '), i.tags.join(' '), i.facts.join(' ')].join(' ').toLowerCase();
+    return q.toLowerCase().split(/\s+/).every(w => hay.includes(w));
+  }
+  const bandOf = k => BANDS.find(b => b[0] === k);
+  function baseFilter(skip) {
+    return items.filter(i => {
+      if (!matchQ(i, view.q)) return false;
+      if (view.status === 'open' && !STATUS_OPEN.includes(i.status)) return false;
+      if (view.status === 'done' && i.status !== 'done') return false;
+      if (view.status === 'passed' && i.status !== 'passed') return false;
+      if (skip !== 'occ' && view.occ && !i.occasions.includes(view.occ)) return false;
+      if (skip !== 'band' && view.band) { const b = bandOf(view.band); if (!(b && i.price != null && i.price >= b[2] && i.price < b[3])) return false; }
+      if (view.stockOnly && i.stock === 'out') return false;
+      if (view.brand && slug(i.brand) !== view.brand) return false;
+      if (view.src === 'manual' && i.src === 'ig') return false;
+      if (view.src === 'ig' && i.src !== 'ig') return false;
+      if (view.src.startsWith('f:') && !(i.folders || []).includes(view.src.slice(2))) return false;
+      return true;
+    });
+  }
+  const scopeOf = list => list.filter(i => (!view.top || i.path[0] === view.top) && view.sub.every((p, k) => i.path[k + 1] === p));
+  const countBy = (list, fn) => { const m = new Map(); list.forEach(i => { const k = fn(i); if (k != null) m.set(k, (m.get(k) || 0) + 1); }); return m; };
+  const statusLabels = top => GO_TOPS.includes(top)
+    ? { want: 'To try', shortlist: 'Shortlisted', done: 'Been', passed: 'Passed' }
+    : TIP_TOPS.includes(top) ? { want: 'Saved', shortlist: 'Starred', done: 'Used', passed: 'Skip' }
+    : { want: 'Want', shortlist: 'Shortlisted', done: 'Bought', passed: 'Passed' };
+
+  /* ---------- top level render ---------- */
+  function render() {
+    $('#vItems').classList.toggle('on', view.tab === 'items');
+    $('#vBrands').classList.toggle('on', view.tab === 'brands');
+    const ib = $('#inboxBtn');
+    ib.hidden = !inbox.length;
+    ib.textContent = inbox.length + ' to sort';
+    renderInbox();
+    renderCapture();
+    if (view.tab === 'brands') renderBrands(); else renderItems();
+    renderCmpBar();
+    if (view.sheet) { const a = document.activeElement; if (!(a && $('#sheet').contains(a))) renderSheet(); }
+    if (view.cmpOpen) renderCmp();
+  }
+
+  function copyText(t, label) {
+    const fallback = () => toast('Copy blocked. Select the text and copy it by hand.');
+    try { navigator.clipboard.writeText(t).then(() => toast(label + ' copied'), fallback); } catch (e) { fallback(); }
+  }
+  function renderCapture() {
+    const p = $('#capPanel');
+    p.hidden = !view.capOpen;
+    $('#capBtn').setAttribute('aria-expanded', String(!!view.capOpen));
+    if (p.hidden) return;
+    const bm = "javascript:(function(){location.href='" + location.origin + location.pathname + "?url='+encodeURIComponent(location.href)+'&title='+encodeURIComponent(document.title);})();";
+    p.replaceChildren(
+      el('h2', { text: 'Add from anywhere' }),
+      el('div', { class: 'fine', text: 'Install Shortlist as an app, then use Share from any app and pick Shortlist. The link lands in your list straight away.' }),
+      el('div', { class: 'cols' },
+        el('div', null, el('h3', { text: 'Pixel: Chrome or Instagram' }),
+          el('ol', null, el('li', { text: 'In Chrome open this page, menu, Install app (or Add to Home screen).' }), el('li', { text: 'In Instagram or Chrome tap Share on a post, page or reel, then choose Shortlist.' }), el('li', { text: 'It opens, saves the link and shows it at the top. Sorting happens when you ask Claude.' }))),
+        el('div', null, el('h3', { text: 'Mac: Chrome' }),
+          el('ol', null, el('li', { text: 'Show the bookmarks bar (Cmd+Shift+B), add any bookmark, edit it and name it Shortlist.' }), el('li', { text: 'Paste the code below into its URL field.' }), el('li', { text: 'On any page, click it. This tab opens with the page saved.' })),
+          el('div', { class: 'copyrow' }, el('code', { text: bm }), el('button', { type: 'button', onclick: () => copyText(bm, 'Bookmark code'), text: 'Copy' })))),
+      user && user.email ? el('div', { class: 'fine', style: 'margin-top:10px' }, 'Signed in as ' + user.email + ' · ', el('button', { type: 'button', style: 'border:0;background:none;color:var(--accent);padding:0;font:inherit;cursor:pointer', onclick: () => user.signOut(), text: 'Sign out' })) : null);
+  }
+
+  function renderInbox() {
+    const p = $('#inboxPanel');
+    p.hidden = !(view.inboxOpen && inbox.length);
+    if (p.hidden) return;
+    p.replaceChildren(
+      el('h2', { text: 'Waiting to be sorted' }),
+      el('div', { class: 'fine', text: 'Ask Claude to sort the Shortlist. It fetches each page, fills in price and details, and files it under the right category.' }),
+      inbox.map(r => el('div', { class: 'irow' },
+        el('a', { href: safeUrl(r.url), target: '_blank', rel: 'noopener', text: r.url }),
+        r.note ? el('span', { class: 'n', text: r.note }) : null,
+        canWrite ? el('button', { type: 'button', 'aria-label': 'Remove link', text: '×', onclick: () => db.doc('inbox/' + r.id).delete().catch(() => toast('Could not remove.')) }) : null)));
+  }
+
+  /* ---------- saved view ---------- */
+  function tileLevel(scope) {
+    let pre = [view.top].filter(Boolean).concat(view.sub);
+    for (let guard = 0; guard < 8; guard++) {
+      const sc = scope.filter(i => pre.every((p, k) => i.path[k] === p));
+      const m = countBy(sc, i => i.path[pre.length]);
+      if (m.size === 1) { pre = pre.concat([...m.keys()][0]); continue; }
+      return { pre, kids: m, sc };
+    }
+    return { pre, kids: new Map(), sc: [] };
+  }
+
+  function renderItems() {
+    const topsEl = $('#tops'), subsEl = $('#subs'), fEl = $('#filters'), oEl = $('#occ'), body = $('#body');
+    const fkey = [view.top, view.sub.join('>'), view.q, view.occ, view.band, view.status, view.stockOnly, view.brand, view.src, view.sort].join('|');
+    if (fkey !== view.fkey) { view.fkey = fkey; view.limit = 60; }
+    const b = baseFilter();
+    const topCounts = countBy(b, i => i.path[0]);
+    const topNames = [...new Set([...TOPS.filter(t => topCounts.has(t)), ...topCounts.keys()])];
+    if (view.top && !items.some(i => i.path[0] === view.top)) { view.top = null; view.sub = []; }
+    topsEl.replaceChildren(
+      el('button', { class: 'chip' + (!view.top ? ' on' : ''), type: 'button', onclick: () => { view.top = null; view.sub = []; render(); } }, 'All', el('span', { class: 'c', text: b.length })),
+      topNames.map(t => el('button', { class: 'chip' + (view.top === t ? ' on' : ''), type: 'button', onclick: () => { view.top = t; view.sub = []; render(); } }, t, el('span', { class: 'c', text: topCounts.get(t) }))));
+
+    const scope = scopeOf(b);
+    const kids = countBy(scope, i => i.path[view.sub.length + 1]);
+    const subKids = [];
+    if (view.top) {
+      subKids.push(el('button', { class: 'crumb', type: 'button', onclick: () => { view.sub = []; render(); }, text: view.top }));
+      view.sub.forEach((p, k) => { subKids.push(el('span', { class: 'sep', text: '›' }), el('button', { class: 'crumb', type: 'button', onclick: () => { view.sub = view.sub.slice(0, k + 1); render(); }, text: p })); });
+      if (kids.size) subKids.push(el('span', { class: 'sep', text: '|' }));
+      [...kids].sort((a, c) => c[1] - a[1]).forEach(([name, n]) => subKids.push(el('button', { class: 'chip', type: 'button', onclick: () => { view.sub = view.sub.concat(name); render(); } }, name, el('span', { class: 'c', text: n }))));
+    }
+    subsEl.replaceChildren(subKids);
+    subsEl.hidden = !view.top;
+
+    // filters
+    const sl = statusLabels(view.top);
+    const segBtn = (key, label) => el('button', { type: 'button', class: view.status === key ? 'on' : '', onclick: () => { view.status = key; render(); }, text: label });
+    const bandCounts = countBy(scopeOf(baseFilter('band')).filter(i => i.price != null), i => (BANDS.find(x => i.price >= x[2] && i.price < x[3]) || [])[0]);
+    const priceSel = bandCounts.size >= 2 || view.band ? el('select', { id: 'bandSel', 'aria-label': 'Price range', onchange: e => { view.band = e.target.value || null; render(); } },
+      el('option', { value: '', text: 'Any price' }), BANDS.filter(x => bandCounts.has(x[0]) || view.band === x[0]).map(x => el('option', { value: x[0], selected: view.band === x[0], text: x[1] + ' (' + (bandCounts.get(x[0]) || 0) + ')' }))) : null;
+    const sortSel = el('select', { id: 'sortSel', 'aria-label': 'Sort', onchange: e => { view.sort = e.target.value; render(); } },
+      [['new', 'Newest'], ['lo', 'Price: low to high'], ['hi', 'Price: high to low']].map(([v, t]) => el('option', { value: v, selected: view.sort === v, text: t })));
+    const folderCounts = countBy(items.flatMap(i => (i.folders || []).map(f => ({ f }))), x => x.f);
+    const srcSel = items.some(i => i.src === 'ig') ? el('select', { id: 'srcSel', 'aria-label': 'Source', onchange: e => { view.src = e.target.value; render(); } },
+      el('option', { value: '', text: 'All sources' }), el('option', { value: 'manual', selected: view.src === 'manual', text: 'Added by you' }), el('option', { value: 'ig', selected: view.src === 'ig', text: 'Instagram saved' }),
+      [...folderCounts].sort((a, c) => c[1] - a[1]).map(([f, n]) => el('option', { value: 'f:' + f, selected: view.src === 'f:' + f, text: 'Folder: ' + f + ' (' + n + ')' }))) : null;
+    const stockChk = el('input', { type: 'checkbox', id: 'stockChk', onchange: e => { view.stockOnly = e.target.checked; render(); } });
+    stockChk.checked = view.stockOnly;
+    const lay = (k, t) => el('button', { type: 'button', class: view.layout === k ? 'on' : '', 'aria-label': t, title: t, onclick: () => { view.layout = k; try { localStorage.setItem('sl-layout', k); } catch (e) {} render(); }, text: k === 'grid' ? '▦' : '☰' });
+    fEl.replaceChildren(
+      el('div', { class: 'fgroup' },
+        el('div', { class: 'seg' }, segBtn('open', 'Open'), segBtn('done', sl.done), segBtn('passed', 'Passed'), segBtn('all', 'All')),
+        priceSel, srcSel,
+        el('label', { class: 'tgl' }, stockChk, 'In stock'),
+        view.brand ? el('button', { class: 'tag-x', type: 'button', onclick: () => { view.brand = null; render(); }, text: 'Brand: ' + ((items.find(i => slug(i.brand) === view.brand) || {}).brand || '') + ' ×' }) : null),
+      el('div', { class: 'fgroup' },
+        el('button', { class: 'pillbtn', type: 'button', style: view.compare ? 'background:var(--accent);color:var(--accent-ink);border-color:var(--accent)' : null, onclick: () => { view.compare = !view.compare; if (!view.compare) view.cmp.clear(); render(); }, text: view.compare ? 'Done comparing' : 'Compare' }),
+        el('div', { class: 'seg' }, lay('grid', 'Grid view'), lay('list', 'List view')),
+        sortSel));
+    const occCounts = countBy(baseFilter('occ').flatMap(i => i.occasions.map(o => ({ o }))), x => x.o);
+    oEl.replaceChildren([...occCounts].sort((a, c) => c[1] - a[1]).map(([o, n]) => el('button', { class: 'chip' + (view.occ === o ? ' on' : ''), type: 'button', onclick: () => { view.occ = view.occ === o ? null : o; render(); } }, o, el('span', { class: 'c', text: n }))));
+    oEl.hidden = !occCounts.size;
+
+    // sorted list
+    const list = scope.slice();
+    if (view.sort === 'lo') list.sort((a, c) => (a.price == null ? Infinity : a.price) - (c.price == null ? Infinity : c.price));
+    else if (view.sort === 'hi') list.sort((a, c) => (c.price == null ? -1 : c.price) - (a.price == null ? -1 : a.price));
+    else list.sort((a, c) => String(c.addedAt || '').localeCompare(String(a.addedAt || '')));
+    view.order = list.map(i => i.id);
+
+    const parts = [];
+    const plain = !view.q && !view.occ && !view.brand && !view.band && !view.stockOnly;
+    if (loaded && db && items.length && plain) {
+      const tl = tileLevel(scopeOf(b));
+      if (tl.kids.size >= 2) {
+        parts.push(el('div', { class: 'sec' }, el('h2', { text: tl.pre.length ? tl.pre.join(' › ') : 'Collections' })));
+        parts.push(el('div', { class: 'tiles' }, [...tl.kids].sort((a, c) => c[1] - a[1]).map(([name, n]) => {
+          const grp = tl.sc.filter(i => i.path[tl.pre.length] === name);
+          const pics = grp.filter(imgOf).slice(0, 4);
+          const cells = pics.length ? pics.map(i => el('div', { class: 'cell' }, vis(i))) : [el('div', { class: 'cell' }, el('span', { class: 'tile', style: '--h:' + hue(name), text: name.charAt(0).toUpperCase() }))];
+          const cls = 'collage ' + (cells.length === 1 ? 'one' : cells.length === 2 ? 'two' : cells.length === 3 ? 'three' : '');
+          return el('button', { class: 'coll', type: 'button', onclick: () => { const full = tl.pre.concat(name); view.top = full[0]; view.sub = full.slice(1); render(); } },
+            el('div', { class: cls }, cells), el('b', { text: name }), el('span', { class: 's', text: n + (n === 1 ? ' item' : ' items') }));
+        })));
+      }
+      const star = b.filter(i => i.status === 'shortlist' && (!view.top || i.path[0] === view.top));
+      if (star.length && !view.top) {
+        parts.push(el('div', { class: 'sec' }, el('h2', { text: 'Shortlisted' }), el('span', { class: 'fine', text: star.length + ' starred' })));
+        parts.push(el('div', { class: 'rail' }, star.slice(0, 24).map(card)));
+      }
+    }
+    if (!loaded) parts.push(el('div', { class: 'grid' }, [1, 2, 3, 4, 5, 6].map(() => el('div', { class: 'skel' }))));
+    else if (!db) parts.push(el('div', { class: 'grid' }, el('div', { class: 'empty' }, el('h3', { text: 'Sign in to see the list' }), 'This page keeps its data in a shared database that needs a signed-in viewer.')));
+    else if (!items.length) parts.push(el('div', { class: 'grid' }, el('div', { class: 'empty' }, el('h3', { text: 'Nothing saved yet' }), 'Paste a link in the bar above. Claude sorts it into a category and fills in the details.')));
+    else if (!list.length) parts.push(el('div', { class: 'grid' }, el('div', { class: 'empty' }, el('h3', { text: 'Nothing matches' }), 'Clear the search or set the status filter to All.')));
+    else {
+      parts.push(el('div', { class: 'sec' }, el('h2', { text: view.top ? (view.sub.length ? view.sub[view.sub.length - 1] : view.top) : 'Everything' }), el('span', { class: 'fine', text: list.length + (list.length === 1 ? ' item' : ' items') })));
+      const shown = list.slice(0, view.limit);
+      parts.push(view.layout === 'list' ? el('div', { class: 'rows' }, shown.map(row)) : el('div', { class: 'grid' }, shown.map(card)));
+      if (list.length > shown.length) parts.push(el('button', { class: 'more-btn', type: 'button', onclick: () => { view.limit += 60; render(); }, text: 'Show ' + Math.min(60, list.length - shown.length) + ' more (' + (list.length - shown.length) + ' left)' }));
+    }
+    body.replaceChildren(parts);
+  }
+
+  function actOpen(i) { return () => { if (view.compare) toggleCmp(i.id); else openSheet(i.id); }; }
+  function starBtn(i) {
+    if (!canWrite || !STATUS_OPEN.includes(i.status)) return null;
+    const on = i.status === 'shortlist';
+    return el('button', { class: 'star' + (on ? ' on' : ''), type: 'button', 'aria-label': on ? 'Remove from shortlist' : 'Add to shortlist', 'aria-pressed': String(on), text: on ? '★' : '☆',
+      onclick: e => { e.stopPropagation(); upd(i.id, { status: on ? 'want' : 'shortlist' }); } });
+  }
+  function priceEl(i) {
+    const disc = i.mrp && i.price && i.mrp > i.price ? Math.round((1 - i.price / i.mrp) * 100) : 0;
+    return i.price != null ? el('div', { class: 'price' }, el('b', { text: fmt(i.price) }), disc ? el('s', { text: fmt(i.mrp) }) : null, disc ? el('i', { text: disc + '% off' }) : null) : null;
+  }
+  function card(i) {
+    const sl = statusLabels(i.path[0]);
+    const sel = view.cmp.has(i.id);
+    const go = actOpen(i);
+    return el('article', { class: 'card' + (sel ? ' sel' : ''), tabindex: '0', role: 'button', 'aria-label': i.title, onclick: go, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } } },
+      el('div', { class: 'pw' }, vis(i),
+        el('div', { class: 'pills' },
+          i.status === 'done' ? el('span', { class: 'pill dn', text: sl.done }) : null,
+          i.status === 'passed' ? el('span', { class: 'pill', text: 'Passed' }) : null,
+          i.stock === 'out' ? el('span', { class: 'pill out', text: 'Sold out' }) : null,
+          i.children && i.children.length ? el('span', { class: 'pill', text: 'List · ' + i.children.length }) : null),
+        view.compare ? null : starBtn(i),
+        view.compare ? el('span', { class: 'tick' + (sel ? ' on' : ''), text: sel ? '✓' : '' }) : null),
+      el('div', { class: 'meta' },
+        i.brand ? el('div', { class: 'brand', text: i.brand }) : null,
+        el('div', { class: 'title', text: i.title }),
+        priceEl(i),
+        el('div', { class: 'sub', text: [i.path.slice(1).join(' › '), i.occasions.join(', ')].filter(Boolean).join(' · ') })));
+  }
+  function row(i) {
+    const sel = view.cmp.has(i.id);
+    const go = actOpen(i);
+    const sl = statusLabels(i.path[0]);
+    return el('article', { class: 'row' + (sel ? ' sel' : ''), tabindex: '0', role: 'button', 'aria-label': i.title, onclick: go, onkeydown: e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); go(); } } },
+      el('div', { class: 'rthumb' }, vis(i)),
+      el('div', { class: 'meta' },
+        i.brand ? el('div', { class: 'brand', text: i.brand }) : null,
+        el('div', { class: 'title', text: i.title }),
+        el('div', { class: 'sub', text: [i.path.slice(1).join(' › '), i.occasions.join(', '), i.stock === 'out' ? 'Sold out' : '', i.status === 'done' ? sl.done : ''].filter(Boolean).join(' · ') })),
+      el('div', { class: 'rend' }, priceEl(i), view.compare ? el('span', { class: 'tick' + (sel ? ' on' : ''), style: 'position:static', text: sel ? '✓' : '' }) : starBtn(i)));
+  }
+
+  /* ---------- brands ---------- */
+  function renderBrands() {
+    $('#tops').replaceChildren(); $('#subs').replaceChildren(); $('#subs').hidden = true; $('#filters').replaceChildren(); $('#occ').replaceChildren(); $('#occ').hidden = true;
+    const map = new Map();
+    items.forEach(i => { if (!i.brand) return; const k = slug(i.brand); if (!map.has(k)) map.set(k, { key: k, name: i.brand, items: [] }); map.get(k).items.push(i); });
+    const docs = new Map(brandDocs.map(d => [d.id, d]));
+    docs.forEach((d, k) => { if (!map.has(k)) map.set(k, { key: k, name: d.name || k, items: [] }); });
+    const all = [...map.values()].map(g => Object.assign(g, { doc: docs.get(g.key) }));
+    const saved = all.filter(g => g.items.length || (g.doc && g.doc.status !== 'suggested')).sort((a, c) => c.items.length - a.items.length);
+    const sugg = all.filter(g => !saved.includes(g));
+    const many = saved.filter(g => g.items.length >= 2 || (g.doc && g.doc.status !== 'suggested'));
+    const shownB = view.allBrands ? saved : many;
+    const bc = g => {
+      const prices = g.items.map(i => i.price).filter(p => p != null);
+      let site = g.doc && g.doc.url; if (!site && g.items[0] && g.items[0].url) { try { site = new URL(g.items[0].url).origin; } catch (e) {} }
+      const cats = [...new Set(g.items.map(i => i.path.slice(0, 3).join(' › ')))];
+      const pics = g.items.filter(imgOf).slice(0, 3);
+      return el('div', { class: 'bcard' },
+        pics.length ? el('div', { class: 'strip', style: 'grid-template-columns:repeat(' + pics.length + ',1fr)' }, pics.map(i => el('div', { class: 'cell' }, vis(i)))) : null,
+        el('h3', { text: g.name }),
+        site ? el('div', { class: 'sub' }, el('a', { href: safeUrl(site), target: '_blank', rel: 'noopener', text: host(site) })) : null,
+        g.items.length ? el('div', { class: 'sub', text: g.items.length + (g.items.length === 1 ? ' item' : ' items') + (prices.length ? ' · ' + fmt(Math.min(...prices)) + (Math.min(...prices) !== Math.max(...prices) ? ' to ' + fmt(Math.max(...prices)) : '') : '') }) : null,
+        cats.length ? el('div', { class: 'sub', text: cats.join(' · ') }) : null,
+        g.doc && g.doc.blurb ? el('p', { text: g.doc.blurb }) : null,
+        g.items.length ? el('button', { class: 'tag-x', type: 'button', onclick: () => { view.tab = 'items'; view.brand = g.key; view.status = 'all'; view.top = null; view.sub = []; render(); }, text: 'See items' }) : null);
+    };
+    const body = $('#body');
+    if (!all.length) { body.replaceChildren(el('div', { class: 'empty' }, el('h3', { text: 'No brands yet' }), 'Brands appear here as you save items. Ask Claude to curate brands for any category and they show up as suggestions.')); return; }
+    body.replaceChildren(
+      el('div', { class: 'bgrid' }, shownB.map(bc)),
+      saved.length > many.length ? el('button', { class: 'more-btn', type: 'button', onclick: () => { view.allBrands = !view.allBrands; render(); }, text: view.allBrands ? 'Show only brands with 2+ items' : 'Show ' + (saved.length - many.length) + ' single-item brands' }) : null,
+      sugg.length ? el('div', { class: 'sec', style: 'margin-top:18px' }, el('h2', { text: 'Suggested by Claude' })) : null,
+      sugg.length ? el('div', { class: 'bgrid', style: 'margin-top:12px' }, sugg.map(bc)) : null);
+  }
+
+  /* ---------- compare ---------- */
+  function toggleCmp(id) {
+    if (view.cmp.has(id)) view.cmp.delete(id);
+    else if (view.cmp.size >= 4) { toast('Compare up to 4 at a time.'); return; }
+    else view.cmp.add(id);
+    render();
+  }
+  function renderCmpBar() {
+    const bar = $('#cmpbar');
+    bar.hidden = !view.compare;
+    document.body.classList.toggle('cmpon', !!view.compare);
+    if (!view.compare) return;
+    const n = view.cmp.size;
+    bar.replaceChildren(el('span', { text: n ? n + ' selected' : 'Tap items to compare' }),
+      el('button', { class: 'go2', type: 'button', disabled: n < 2, onclick: () => { view.cmpOpen = true; $('#cmp').hidden = false; renderCmp(); }, text: 'Compare' }),
+      el('button', { class: 'x2', type: 'button', onclick: () => { view.compare = false; view.cmp.clear(); render(); }, text: 'Cancel' }));
+  }
+  function factsOf(i) {
+    const m = new Map(), rest = [];
+    i.facts.forEach(f => { const k = f.indexOf(': '); if (k > 0 && k < 22) m.set(f.slice(0, k), f.slice(k + 2)); else rest.push(f); });
+    return { m, rest };
+  }
+  function renderCmp() {
+    const sel = [...view.cmp].map(id => items.find(i => i.id === id)).filter(Boolean);
+    const c = $('#cmp');
+    if (sel.length < 2) { closeCmp(); return; }
+    const f = sel.map(factsOf);
+    const keys = []; f.forEach(x => x.m.forEach((v, k) => { if (!keys.includes(k)) keys.push(k); }));
+    const prices = sel.map(i => i.price).filter(p => p != null);
+    const lo = prices.length ? Math.min(...prices) : null;
+    const tr = (label, cell) => {
+      const cells = sel.map((i, k) => cell(i, k));
+      if (label && cells.every(x => x == null || x === '' || x === false)) return null;
+      return el('tr', null, el('th', { class: 'l', scope: 'row', text: label }), cells.map(x => el('td', null, x)));
+    };
+    c.replaceChildren(
+      el('div', { class: 'hd' }, el('h2', { text: 'Compare' }), el('button', { class: 'pillbtn', type: 'button', onclick: closeCmp, text: 'Close' })),
+      el('div', { class: 'cwrap' }, el('table', { class: 'ctab' }, el('tbody', null,
+        tr('', i => el('div', null, el('div', { class: 'ph' }, vis(i)))),
+        tr('Item', i => el('div', null, i.brand ? el('div', { class: 'brand', text: i.brand }) : null, el('b', { text: i.title }))),
+        tr('Price', i => i.price == null ? '' : el('span', { class: i.price === lo && sel.length > 1 ? 'best' : '', text: fmt(i.price) + (i.price === lo && sel.length > 1 && prices.filter(p => p === lo).length === 1 ? '  lowest' : '') })),
+        tr('Was', i => i.mrp ? fmt(i.mrp) : ''),
+        tr('Stock', i => i.stock === 'out' ? 'Sold out' : i.stock === 'in' ? 'In stock' : ''),
+        keys.map(k => tr(k, (i, n) => f[n].m.get(k) || '')),
+        tr('Also', (i, n) => f[n].rest.length ? el('div', null, f[n].rest.map(x => el('div', { text: x }))) : null),
+        tr('Occasions', i => i.occasions.join(', ')),
+        tr('Link', i => safeUrl(i.url) ? el('a', { href: i.url, target: '_blank', rel: 'noopener', text: host(i.url) + ' ↗' }) : ''),
+        tr('', i => el('button', { class: 'pillbtn', type: 'button', onclick: () => { closeCmp(); openSheet(i.id); }, text: 'Open' }))))));
+  }
+  function closeCmp() { view.cmpOpen = false; $('#cmp').hidden = true; }
+
+  /* ---------- detail sheet ---------- */
+  function openSheet(id) { view.sheet = id; $('#scrim').hidden = false; $('#sheet').hidden = false; renderSheet(); $('#sheet').scrollTop = 0; }
+  function closeSheet() { view.sheet = null; $('#scrim').hidden = true; $('#sheet').hidden = true; }
+  function stepSheet(d) { const k = view.order.indexOf(view.sheet) + d; if (k >= 0 && k < view.order.length) openSheet(view.order[k]); }
+  let armed = false;
+
+  function linkRow(i) {
+    const ls = [];
+    if (safeUrl(i.site)) ls.push(el('a', { class: 'ghost', href: i.site, target: '_blank', rel: 'noopener', text: 'Website: ' + host(i.site) + ' ↗' }));
+    if (i.owner) ls.push(el('a', { class: 'ghost', href: 'https://www.instagram.com/' + i.owner + '/', target: '_blank', rel: 'noopener', text: '@' + i.owner + ' ↗' }));
+    if (i.postUrl && safeUrl(i.postUrl)) ls.push(el('a', { class: 'ghost', href: i.postUrl, target: '_blank', rel: 'noopener', text: 'Original post ↗' }));
+    const par = i.parent && items.find(x => x.id === i.parent);
+    if (par) ls.push(el('button', { class: 'ghost', type: 'button', onclick: () => openSheet(par.id), text: 'From: ' + par.title }));
+    return ls.length ? el('div', { class: 'linkrow' }, ls) : null;
+  }
+  function childList(i) {
+    const ks = (i.children || []).map(id => items.find(x => x.id === id)).filter(Boolean);
+    if (!ks.length) return null;
+    return el('div', null, el('div', { class: 'lbl', text: 'In this post (' + ks.length + ')' }),
+      el('div', { class: 'kids' }, ks.map(k => el('button', { class: 'kid', type: 'button', onclick: () => openSheet(k.id) },
+        el('b', { text: k.title }), el('span', { class: 'fine', text: [(k.facts.find(f => f.startsWith('What: ')) || '').replace('What: ', ''), k.path.slice(1).join(' › ')].filter(Boolean).join(' · ') })))));
+  }
+
+  function renderSheet() {
+    const i = items.find(x => x.id === view.sheet);
+    const s = $('#sheet');
+    if (!i) { closeSheet(); return; }
+    const sl = statusLabels(i.path[0]);
+    const idx = view.order.indexOf(i.id);
+    const allPaths = [...new Set(items.map(x => x.path.join(' / ')))];
+    const similar = items.filter(x => x.id !== i.id && x.path[0] === i.path[0] && x.path.slice(0, 2).join() === i.path.slice(0, 2).join()).sort((a, c) => (c.path.join() === i.path.join()) - (a.path.join() === i.path.join())).slice(0, 8);
+    const dl = el('datalist', { id: 'paths' }, allPaths.map(p => el('option', { value: p })));
+    const occInput = el('input', { type: 'text', id: 'occIn', placeholder: 'Add an occasion, press Enter', disabled: !canWrite, onkeydown: e => {
+      if (e.key !== 'Enter') return; e.preventDefault();
+      const v = e.target.value.trim(); if (!v || i.occasions.includes(v)) return;
+      upd(i.id, { occasions: i.occasions.concat(v) });
+    } });
+    const notes = el('textarea', { id: 'notesIn', placeholder: 'Size, who it is for, why you saved it', disabled: !canWrite, text: i.notes || '', onblur: e => { if (e.target.value !== (i.notes || '')) upd(i.id, { notes: e.target.value }); } });
+    const cat = el('input', { type: 'text', id: 'catIn', list: 'paths', value: i.path.join(' / '), disabled: !canWrite, onchange: e => {
+      const p = e.target.value.split('/').map(x => x.trim()).filter(Boolean);
+      if (p.length) upd(i.id, { path: p }); else e.target.value = i.path.join(' / ');
+    } });
+    const stBtn = (k, label) => el('button', { type: 'button', class: i.status === k ? 'on' : '', disabled: !canWrite, onclick: () => upd(i.id, { status: k }), text: label });
+    const fx = factsOf(i);
+    s.replaceChildren(el('div', { class: 'sh' },
+      el('div', { class: 'grab' }),
+      el('div', { class: 'sh-top' },
+        el('span', { class: 'fine', text: i.path.join(' › ') }),
+        el('div', { class: 'nav' },
+          el('button', { class: 'sq', type: 'button', 'aria-label': 'Previous item', disabled: idx <= 0, onclick: () => stepSheet(-1), text: '‹' }),
+          el('button', { class: 'sq', type: 'button', 'aria-label': 'Next item', disabled: idx < 0 || idx >= view.order.length - 1, onclick: () => stepSheet(1), text: '›' }),
+          el('button', { class: 'sq', type: 'button', 'aria-label': 'Close', onclick: closeSheet, text: '×' }))),
+      el('div', { class: 'shimg' }, vis(i)),
+      el('div', null,
+        i.brand ? el('div', { class: 'brand', text: i.brand }) : null,
+        el('h2', { text: i.title }),
+        i.price != null ? el('div', { style: 'margin-top:8px;font-size:19px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap' }, priceEl(i), i.stock === 'out' ? el('span', { class: 'pill out', text: 'Sold out' }) : null) : null,
+        i.checkedAt ? el('div', { class: 'fine', style: 'margin-top:2px', text: 'Price and stock as of ' + dateOf(i.checkedAt) }) : null),
+      safeUrl(i.url) ? el('a', { class: 'go', href: i.url, target: '_blank', rel: 'noopener', text: (i.src === 'ig' ? (i.parent ? 'Open @' + (i.handle || 'profile') + ' on Instagram' : 'Open Instagram post') : 'Open on ' + host(i.url)) + ' ↗' }) : null,
+      igEmbed(i),
+      linkRow(i),
+      el('div', null, el('div', { class: 'lbl', text: 'Status' }), el('div', { class: 'seg' }, stBtn('want', sl.want), stBtn('shortlist', '★ ' + sl.shortlist), stBtn('done', sl.done), stBtn('passed', 'Passed'))),
+      i.facts.length ? el('div', null, el('div', { class: 'lbl', text: 'Details' }), el('dl', { class: 'facts' },
+        [...fx.m].map(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]),
+        fx.rest.map(t => el('dd', { class: 'full', text: t })))) : null,
+      childList(i),
+      el('div', null, el('div', { class: 'lbl', text: 'Occasions' }),
+        el('div', { class: 'chips', style: 'margin-bottom:8px' }, i.occasions.map(o => el('span', { class: 'tag-x' }, o, canWrite ? el('button', { type: 'button', 'aria-label': 'Remove ' + o, style: 'border:0;background:none;color:inherit;padding:0 0 0 6px', text: '×', onclick: () => upd(i.id, { occasions: i.occasions.filter(x => x !== o) }) }) : null))),
+        occInput),
+      el('div', null, el('div', { class: 'lbl', text: 'Notes' }), notes),
+      similar.length ? el('div', null, el('div', { class: 'lbl', text: 'More like this' }), el('div', { class: 'more' }, similar.map(x => el('button', { class: 'mini', type: 'button', onclick: () => openSheet(x.id) }, el('div', { class: 'p' }, vis(x)), el('span', { text: x.title }))))) : null,
+      el('div', null, el('div', { class: 'lbl', text: 'Category' }), cat, dl, el('div', { class: 'fine', style: 'margin-top:4px', text: 'Separate levels with a slash. Type a new path to create a category.' })),
+      el('div', { class: 'fine', text: 'Saved ' + dateOf(i.addedAt) + (i.via === 'claude' ? ' · sorted by Claude' : '') }),
+      canWrite ? el('button', { class: 'danger', type: 'button', onclick: e => {
+        if (!armed) { armed = true; e.target.textContent = 'Tap again to remove for good'; setTimeout(() => { armed = false; if (e.target.isConnected) e.target.textContent = 'Remove from list'; }, 3500); return; }
+        armed = false; const id = i.id; closeSheet(); if (id.startsWith('ig-')) upd(id, { hidden: true }); else db.doc('items/' + id).delete().catch(() => toast('Could not remove.'));
+      }, text: 'Remove from list' }) : null));
+  }
+
+  /* ---------- wiring ---------- */
+  $('#vItems').onclick = () => { view.tab = 'items'; render(); };
+  $('#vBrands').onclick = () => { view.tab = 'brands'; view.brand = null; render(); };
+  $('#inboxBtn').onclick = () => { view.inboxOpen = !view.inboxOpen; render(); };
+  $('#capBtn').onclick = () => { view.capOpen = !view.capOpen; render(); };
+  $('#themeBtn').onclick = () => {
+    const cur = root.getAttribute('data-theme');
+    const dark = cur ? cur === 'dark' : window.matchMedia('(prefers-color-scheme: dark)').matches;
+    const n = dark ? 'light' : 'dark';
+    root.setAttribute('data-theme', n);
+    try { localStorage.setItem('sl-theme', n); } catch (e) {}
+  };
+  $('#scrim').onclick = closeSheet;
+  document.addEventListener('keydown', e => {
+    const typing = /^(INPUT|TEXTAREA|SELECT)$/.test((document.activeElement || {}).tagName || '');
+    if (e.key === 'Escape') { if (view.cmpOpen) closeCmp(); else if (view.sheet) closeSheet(); }
+    else if (!typing && view.sheet && e.key === 'ArrowRight') stepSheet(1);
+    else if (!typing && view.sheet && e.key === 'ArrowLeft') stepSheet(-1);
+    else if (!typing && e.key === '/') { e.preventDefault(); $('#q').focus(); }
+  });
+  $('#q').addEventListener('input', e => { view.q = e.target.value.trim(); if (view.tab === 'brands') view.tab = 'items'; render(); });
+  const addForm = $('#addForm');
+  $('#addUrl').addEventListener('input', e => addForm.classList.toggle('has', !!e.target.value.trim()));
+  addForm.addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!db) { toast('Sign in to save links.'); return; }
+    const btn = $('#addBtn'); btn.disabled = true;
+    const ok = await addLinks($('#addUrl').value, $('#addNote').value.trim());
+    btn.disabled = false;
+    if (ok) { $('#addUrl').value = ''; $('#addNote').value = ''; addForm.classList.remove('has'); }
+  });
+  if (!canWrite) addForm.hidden = true;
+
+  async function shareIn() {
+    const q = new URLSearchParams(location.search);
+    const raw = [q.get('url'), q.get('text'), q.get('title')].filter(Boolean).join(' ');
+    if (!raw) return;
+    history.replaceState(null, '', location.pathname);
+    if (db && canWrite) await addLinks(raw, q.get('title') && q.get('url') ? q.get('title') : '');
+  }
+  render();
+  if (db) {
+    shareIn();
+    const onErr = () => { loaded = true; render(); };
+    const first = { m: false, s: false };
+    const done = () => { if (first.m && first.s) loaded = true; rebuild(); render(); };
+    db.collection('items').onSnapshot(s => { manual = s.docs.map(d => norm(d.id, d.data())); first.m = true; done(); }, onErr);
+    db.collection('igshards').onSnapshot(s => { ig = s.docs.flatMap(d => ((d.data() || {}).items || []).map(x => norm(x.id, x))); first.s = true; done(); }, () => { first.s = true; done(); });
+    db.collection('ov').onSnapshot(s => { ov = new Map(s.docs.map(d => [d.id, d.data()])); done(); }, () => {});
+    db.collection('inbox').onSnapshot(s => { inbox = s.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, c) => String(a.addedAt).localeCompare(String(c.addedAt))); render(); }, () => {});
+    db.doc('config/capture').onSnapshot(d => { captureEmail = (d.exists && d.data().email) || ''; render(); }, () => {});
+    db.collection('brands').onSnapshot(s => { brandDocs = s.docs.map(d => Object.assign({ id: d.id }, d.data())); if (view.tab === 'brands') render(); }, () => {});
+  } else { loaded = true; render(); }
+  if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+
+</html>
