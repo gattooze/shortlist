@@ -259,7 +259,7 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
   <header class="top">
     <div class="brandrow">
       <h1 class="mark">Shortlist</h1>
-      <nav class="views" aria-label="View"><button id="vItems" class="on" type="button">Saved</button><button id="vBrands" type="button">Brands</button></nav>
+      <nav class="views" aria-label="View"><button id="vItems" class="on" type="button">Saved</button><button id="vBrands" type="button">Brands</button><button id="vTokyo" type="button">Tokyo</button></nav>
       <span class="spacer"></span>
       <button id="inboxBtn" class="pillbtn warn" type="button" hidden></button>
       <button id="capBtn" class="pillbtn" type="button" aria-expanded="false">Add from anywhere</button>
@@ -292,6 +292,7 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 
 <script type="module">
 import { boot, SHEET_BASE } from './supa.js';
+import { mountTokyo } from './tokyo.js';
 (async function () {
   const TOPS = ['Wear', 'Home & Decor', 'Gifts', 'Eat & Drink', 'Places & Stays', 'Ideas & Tips', 'Kids', 'Services & Vendors', 'Art', 'Games & Fun', 'Music & Artists', 'Beauty', 'Tech', 'Other'];
   const GO_TOPS = ['Eat & Drink', 'Places & Stays'];
@@ -434,12 +435,19 @@ import { boot, SHEET_BASE } from './supa.js';
   function render() {
     $('#vItems').classList.toggle('on', view.tab === 'items');
     $('#vBrands').classList.toggle('on', view.tab === 'brands');
+    $('#vTokyo').classList.toggle('on', view.tab === 'tokyo');
+    const tk = view.tab === 'tokyo';
+    $('#addForm').hidden = tk || !canWrite;
+    $('.search').hidden = tk;
+    $('#tops').hidden = tk; $('#filters').hidden = tk;
+    if (tk) { $('#subs').hidden = true; $('#occ').hidden = true; }
     const ib = $('#inboxBtn');
     ib.hidden = !inbox.length;
     ib.textContent = inbox.length + ' to sort';
     renderInbox();
     renderCapture();
-    if (view.tab === 'brands') renderBrands(); else renderItems();
+    if (tk) { $('#tops').replaceChildren(); $('#subs').replaceChildren(); $('#filters').replaceChildren(); $('#occ').replaceChildren(); mountTokyo($('#body')); }
+    else if (view.tab === 'brands') renderBrands(); else renderItems();
     renderCmpBar();
     if (view.sheet) { const a = document.activeElement; if (!(a && $('#sheet').contains(a))) renderSheet(); }
     if (view.cmpOpen) renderCmp();
@@ -797,6 +805,7 @@ import { boot, SHEET_BASE } from './supa.js';
   /* ---------- wiring ---------- */
   $('#vItems').onclick = () => { view.tab = 'items'; render(); };
   $('#vBrands').onclick = () => { view.tab = 'brands'; view.brand = null; render(); };
+  $('#vTokyo').onclick = () => { view.tab = 'tokyo'; render(); window.scrollTo(0, 0); };
   $('#inboxBtn').onclick = () => { view.inboxOpen = !view.inboxOpen; render(); };
   $('#capBtn').onclick = () => { view.capOpen = !view.capOpen; render(); };
   $('#themeBtn').onclick = () => {

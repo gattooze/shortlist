@@ -1,6 +1,6 @@
 /* App-shell cache so the app opens offline and stays installable. Data always comes live from Supabase. */
-const V = 'shortlist-v1';
-const SHELL = ['./', 'index.html', 'supa.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
+const V = 'shortlist-v2';
+const SHELL = ['./', 'index.html', 'tokyo.js', 'supa.js', 'config.js', 'manifest.webmanifest', 'icons/icon-192.png'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(V).then(c => c.addAll(SHELL)).then(() => self.skipWaiting())); });
 self.addEventListener('activate', e => { e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== V).map(k => caches.delete(k)))).then(() => self.clients.claim())); });
 self.addEventListener('fetch', e => {

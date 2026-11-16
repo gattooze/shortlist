@@ -8,6 +8,7 @@ A shared list of things to buy, eat, visit and gift. Installable app (PWA) on Su
 - Code is public. Data (docs table) and photos live in Supabase behind login.
 
 ## Files
+- `tokyo.js`: the Tokyo trip view (static content, no personal data). Opens from the Tokyo button in the header.
 - `index.html`: the whole UI. `supa.js`: login, doc store, realtime. `config.js`: project URL and public anon key.
 - `sql/schema.sql`: tables, row-level security, realtime, photo bucket.
 - Import data (`docs.csv`) and photo sheets are private and kept out of this repo: `~/shortlist-seed/`.
