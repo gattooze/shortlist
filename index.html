@@ -154,6 +154,13 @@ main{display:grid;gap:14px;padding-top:14px}
 .chip.warn{border-color:var(--gold);color:var(--gold)}
 .chip.ghostchip{border-style:dashed}
 
+.collhead{display:grid;gap:12px;margin:6px 0 8px}
+.collhead .row2{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.collhead h2{margin:0;font-family:var(--f-display);font-size:26px;flex:1}
+.collhead input,.collrow select{font:inherit;font-size:13px;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.collrow{margin-bottom:8px}.collrow select{width:100%;border-radius:10px;padding:8px 10px}
+.tiles.pins .coll b{font-size:19px}
+
 /* grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:22px 16px}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 10px}}
@@ -317,6 +324,10 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
   const DEFAULT_CATS = [['Home & Decor', 'thing'], ['Wear', 'thing'], ['Eat & Drink', 'place'], ['Places & Stays', 'place'], ['Travel', 'place'], ['Ideas & Tips', 'idea'], ['Gifts', 'thing'], ['Kids', 'thing'], ['Beauty', 'thing'], ['Tech', 'thing'], ['Art', 'thing'], ['Music & Artists', 'idea'], ['Games & Fun', 'idea'], ['Services & Vendors', 'other'], ['Other', 'other']].map(([name, kind]) => ({ name, kind }));
   const KINDS = { thing: 'Things', place: 'Places', idea: 'Ideas and reads', other: 'Other' };
   let cats = DEFAULT_CATS, catsSaved = false;
+  /* collections cut across categories (e.g. Wedding, with groups Decor, Events, D&D). Items carry colls: ['Wedding/Decor'].
+     Kept in config/collections; a pinned one shows at the top of Saved and can be unpinned or removed. */
+  let colls = [], collsSaved = false;
+  const inColl = (i, name, group) => (i.colls || []).some(c => group ? c === name + '/' + group : (c === name || c.startsWith(name + '/')));
   const kindOf = top => ((cats.find(c => c.name === top) || {}).kind) || 'other';
   const BANDS = [['u5', 'Under 5k', 0, 5000], ['5', '5k to 10k', 5000, 10000], ['10', '10k to 20k', 10000, 20000], ['20', '20k and up', 20000, Infinity]];
   /* replaceChildren takes nodes, not arrays: let it accept nested lists and skip empty slots */
@@ -488,6 +499,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       if (view.status === 'done' && i.status !== 'done') return false;
       if (view.status === 'passed' && i.status !== 'passed') return false;
       if (skip !== 'occ' && view.occ && !i.occasions.includes(view.occ)) return false;
+      if (view.coll && !inColl(i, view.coll, skip === 'cgroup' ? null : view.cgroup)) return false;
       if (skip !== 'band' && view.band) { const b = bandOf(view.band); if (!(b && i.price != null && i.price >= b[2] && i.price < b[3])) return false; }
       if (view.stockOnly && i.stock === 'out') return false;
       if (skip !== 'tag' && view.tag && !(i.tags || []).includes(view.tag)) return false;
@@ -607,7 +619,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
 
   function renderItems() {
     const topsEl = $('#tops'), subsEl = $('#subs'), fEl = $('#filters'), oEl = $('#occ'), body = $('#body');
-    const fkey = [view.top, view.sub.join('>'), view.q, view.occ, view.band, view.tag, view.status, view.stockOnly, view.brand, view.src, view.sort].join('|');
+    const fkey = [view.coll, view.cgroup, view.top, view.sub.join('>'), view.q, view.occ, view.band, view.tag, view.status, view.stockOnly, view.brand, view.src, view.sort].join('|');
     if (fkey !== view.fkey) { view.fkey = fkey; view.limit = 60; }
     const b = baseFilter();
     const topCounts = countBy(b, i => i.path[0]);
@@ -671,7 +683,9 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     view.order = list.map(i => i.id);
 
     const parts = [];
-    const plain = !view.q && !view.occ && !view.brand && !view.band && !view.tag && !view.stockOnly;
+    if (view.coll) parts.push(collHeader());
+    else if (loaded && db && !view.top && !view.q) { const pr = pinnedRow(b); if (pr) parts.push(pr); }
+    const plain = !view.coll && !view.q && !view.occ && !view.brand && !view.band && !view.tag && !view.stockOnly;
     if (loaded && db && items.length && plain) {
       const tl = tileLevel(scopeOf(b));
       if (tl.kids.size >= 2) {
@@ -702,6 +716,75 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       if (list.length > shown.length) parts.push(el('button', { class: 'more-btn', type: 'button', onclick: () => { view.limit += 60; render(); }, text: 'Show ' + Math.min(60, list.length - shown.length) + ' more (' + (list.length - shown.length) + ' left)' }));
     }
     body.replaceChildren(parts);
+  }
+
+  /* ---------- collections ---------- */
+  const saveColls = l => db.doc('config/collections').set({ list: l }).catch(() => toast('Could not save collections.'));
+  const collage = list => {
+    const pics = list.filter(imgOf).slice(0, 4);
+    const cells = pics.length ? pics.map(i => el('div', { class: 'cell' }, vis(i))) : [el('div', { class: 'cell' }, el('span', { class: 'tile', style: '--h:' + hue(list.length), text: '·' }))];
+    return el('div', { class: 'collage ' + (cells.length === 1 ? 'one' : cells.length === 2 ? 'two' : cells.length === 3 ? 'three' : '') }, cells);
+  };
+  function pinnedRow(b) {
+    const pins = colls.filter(c => c.pinned);
+    if (!pins.length) return null;
+    return el('div', null, el('div', { class: 'sec' }, el('h2', { text: 'Pinned' })),
+      el('div', { class: 'tiles pins' }, pins.map(c => {
+        const its = b.filter(i => inColl(i, c.name));
+        return el('button', { class: 'coll pin', type: 'button', onclick: () => { view.coll = c.name; view.cgroup = null; view.top = null; view.sub = []; render(); window.scrollTo(0, 0); } },
+          collage(its), el('b', { text: '📌 ' + c.name }), el('span', { class: 's', text: its.length + ' items · ' + (c.groups || []).join(', ') }));
+      })));
+  }
+  function collHeader() {
+    const c = colls.find(x => x.name === view.coll) || { name: view.coll, groups: [] };
+    const all = baseFilter('cgroup');
+    const gc = countBy(all.flatMap(i => (i.colls || []).filter(x => x.startsWith(c.name + '/')).map(x => ({ g: x.slice(c.name.length + 1) }))), x => x.g);
+    const upd2 = patch => saveColls(colls.map(x => x.name === c.name ? Object.assign({}, x, patch) : x));
+    const occ = items.filter(i => (i.occasions || []).some(o => o.toLowerCase() === c.name.toLowerCase()) && !inColl(i, c.name));
+    const addGroup = el('input', { type: 'text', placeholder: 'New group, press Enter', onkeydown: e => {
+      if (e.key !== 'Enter') return; e.preventDefault(); const v = e.target.value.trim(); if (v && !(c.groups || []).includes(v)) upd2({ groups: (c.groups || []).concat(v) });
+    } });
+    return el('div', { class: 'collhead' },
+      el('div', { class: 'row2' },
+        el('button', { type: 'button', class: 'pillbtn', onclick: () => { view.coll = null; view.cgroup = null; render(); }, text: '‹ All saves' }),
+        el('h2', { text: c.name }),
+        canWrite ? el('button', { type: 'button', class: 'pillbtn', onclick: () => upd2({ pinned: !c.pinned }), text: c.pinned ? 'Unpin' : 'Pin to top' }) : null,
+        canWrite ? el('button', { type: 'button', class: 'pillbtn', onclick: async e => {
+          if (e.target.dataset.armed !== '1') { e.target.dataset.armed = '1'; e.target.textContent = 'Tap again to remove the collection (items stay saved)'; return; }
+          const hit = items.filter(i => inColl(i, c.name));
+          saveColls(colls.filter(x => x.name !== c.name)); view.coll = null; render();
+          for (const i of hit) await upd(i.id, { colls: (i.colls || []).filter(x => x !== c.name && !x.startsWith(c.name + '/')) });
+          toast('Removed ' + c.name + '. Its ' + hit.length + ' items are still in your list.');
+        }, text: 'Remove collection' }) : null),
+      el('div', { class: 'chips' },
+        el('button', { class: 'chip' + (!view.cgroup ? ' on' : ''), type: 'button', onclick: () => { view.cgroup = null; render(); } }, 'All', el('span', { class: 'c', text: all.length })),
+        (c.groups || []).map(g => el('button', { class: 'chip' + (view.cgroup === g ? ' on' : ''), type: 'button', onclick: () => { view.cgroup = view.cgroup === g ? null : g; render(); } }, g, el('span', { class: 'c', text: gc.get(g) || 0 }))),
+        canWrite ? addGroup : null),
+      canWrite && occ.length ? el('button', { type: 'button', class: 'pillbtn warn', onclick: async () => {
+        let n = 0; for (const i of occ) { await upd(i.id, { colls: (i.colls || []).concat(c.name) }); n++; } toast('Added ' + n + ' items to ' + c.name + '.');
+      }, text: 'Add the ' + occ.length + ' saves marked "' + c.name + '" to this collection' }) : null,
+      el('div', { class: 'fine', text: 'Open any card and use "Collections" to put it here or move it between groups.' }));
+  }
+  /* in the card: which collection and group it belongs to */
+  function collEdit(i) {
+    if (!colls.length && !canWrite) return null;
+    const mine = i.colls || [];
+    const set = v => upd(i.id, { colls: v });
+    const newColl = el('input', { type: 'text', placeholder: 'New collection, press Enter', onkeydown: e => {
+      if (e.key !== 'Enter') return; e.preventDefault(); const v = e.target.value.trim();
+      if (v && !colls.some(c => c.name === v)) { saveColls(colls.concat({ name: v, pinned: false, groups: [] })); set(mine.concat(v)); }
+    } });
+    return el('div', null, el('div', { class: 'lbl', text: 'Collections' }),
+      colls.map(c => {
+        const cur = mine.find(x => x === c.name || x.startsWith(c.name + '/'));
+        const sel = el('select', { 'aria-label': c.name, disabled: !canWrite, onchange: e => {
+          const rest = mine.filter(x => x !== c.name && !x.startsWith(c.name + '/'));
+          set(e.target.value === '-' ? rest : rest.concat(e.target.value));
+        } }, el('option', { value: '-', text: 'Not in ' + c.name }), el('option', { value: c.name, selected: cur === c.name, text: c.name + ' (no group)' }),
+          (c.groups || []).map(g => el('option', { value: c.name + '/' + g, selected: cur === c.name + '/' + g, text: c.name + ' › ' + g })));
+        return el('div', { class: 'collrow' }, sel);
+      }),
+      canWrite ? newColl : null);
   }
 
   function actOpen(i) { return () => { if (view.compare) toggleCmp(i.id); else openSheet(i.id); }; }
@@ -1001,6 +1084,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       el('div', null, el('div', { class: 'lbl', text: 'Occasions' }),
         el('div', { class: 'chips', style: 'margin-bottom:8px' }, i.occasions.map(o => el('span', { class: 'tag-x' }, o, canWrite ? el('button', { type: 'button', 'aria-label': 'Remove ' + o, style: 'border:0;background:none;color:inherit;padding:0 0 0 6px', text: '×', onclick: () => upd(i.id, { occasions: i.occasions.filter(x => x !== o) }) }) : null))),
         occInput),
+      collEdit(i),
       tagEdit(i),
       el('div', null, el('div', { class: 'lbl', text: 'Notes' }), notes),
       similar.length ? el('div', null, el('div', { class: 'lbl', text: 'More like this' }), el('div', { class: 'more' }, similar.map(x => el('button', { class: 'mini', type: 'button', onclick: () => openSheet(x.id) }, el('div', { class: 'p' }, vis(x)), el('span', { text: x.title }))))) : null,
@@ -1076,6 +1160,12 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       const l = d.exists && Array.isArray(d.data().list) ? d.data().list : null;
       if (l && l.length) { cats = l; catsSaved = true; } else if (!catsSaved && canWrite) { catsSaved = true; saveCats(DEFAULT_CATS); }
       model = null; render();
+    }, () => {});
+    db.doc('config/collections').onSnapshot(d => {
+      const l = d.exists && Array.isArray(d.data().list) ? d.data().list : null;
+      if (l) { colls = l; collsSaved = true; }
+      else if (!collsSaved && canWrite) { collsSaved = true; saveColls([{ name: 'Wedding', pinned: true, groups: ['Decor', 'Events', 'D&D'] }]); }
+      render();
     }, () => {});
     db.doc('config/capture').onSnapshot(d => { captureEmail = (d.exists && d.data().email) || ''; render(); }, () => {});
     db.collection('brands').onSnapshot(s => { brandDocs = s.docs.map(d => Object.assign({ id: d.id }, d.data())); if (view.tab === 'brands') render(); }, () => {});
