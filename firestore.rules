@@ -1,0 +1,22 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Access list: members/<lowercase email> with role owner, editor or viewer. Owner docs are added from the console.
+    function email() { return request.auth.token.email.lower(); }
+    function signedIn() { return request.auth != null && request.auth.token.email_verified == true; }
+    function mpath() { return /databases/$(database)/documents/members/$(email()); }
+    function isMember() { return signedIn() && exists(mpath()); }
+    function role() { return get(mpath()).data.role; }
+    function isOwner() { return isMember() && role() == 'owner'; }
+    function canEdit() { return isMember() && role() in ['owner', 'editor']; }
+
+    match /members/{e} {
+      allow read: if isOwner() || (signedIn() && e == email());
+      allow write: if isOwner();
+    }
+    match /{coll}/{id} {
+      allow read: if isMember();
+      allow create, update, delete: if canEdit();
+    }
+  }
+}
