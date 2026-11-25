@@ -1,2 +1,5 @@
 .DS_Store
 seed/
+sheets/
+node_modules/
+.firebase/

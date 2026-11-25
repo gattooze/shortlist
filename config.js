@@ -1,4 +1,11 @@
-// Fill these two values after creating the Supabase project (Project Settings > API).
-// The anon key is a public, browser-safe key: access is controlled by login + row-level security.
-export const SUPABASE_URL = 'https://YOUR-PROJECT-REF.supabase.co';
-export const SUPABASE_ANON = 'YOUR-ANON-PUBLIC-KEY';
+// Firebase web config for Shortlist (project "Personal Projects"). Public by design:
+// access is controlled by sign-in plus firestore.rules and storage.rules.
+export const FIREBASE_CONFIG = {
+  apiKey: 'AIzaSyDNureK24bDYXU4Y9XlGrTbiVHZi4T5vPE',
+  authDomain: 'pratik-personal-tools.firebaseapp.com',
+  projectId: 'pratik-personal-tools',
+  storageBucket: 'pratik-personal-tools.firebasestorage.app',
+  messagingSenderId: '880814674385',
+  appId: '1:880814674385:web:992481dd40a242680e50f0',
+};
+export const FUNCTIONS_REGION = 'asia-south1';

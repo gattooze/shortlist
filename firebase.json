@@ -1,0 +1,59 @@
+{
+  "firestore": {
+    "rules": "firestore.rules"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "runtime": "nodejs22",
+      "predeploy": [
+        "npm --prefix \"$RESOURCE_DIR\" install --no-audit --no-fund"
+      ]
+    }
+  ],
+  "hosting": {
+    "site": "pratik-personal-tools",
+    "public": ".",
+    "ignore": [
+      "firebase.json",
+      "*.rules",
+      ".firebaserc",
+      "README.md",
+      ".git/**",
+      ".gitignore",
+      "functions/**",
+      "seed/**",
+      "**/node_modules/**",
+      "**/.*",
+      "supa.js",
+      "sql/**",
+      "config.example.js",
+      "tokyo.js",
+      "tokyo.html"
+    ],
+    "headers": [
+      {
+        "source": "sheets/**",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public,max-age=604800"
+          }
+        ]
+      },
+      {
+        "source": "**/*.@(js|html|webmanifest)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "no-cache"
+          }
+        ]
+      }
+    ]
+  }
+}

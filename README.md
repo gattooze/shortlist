@@ -1,31 +1,21 @@
 # Shortlist
 
-A shared list of things to buy, eat, visit and gift. Installable app (PWA) on Supabase.
+A personal, visual bookmarking space: links, products, places, ideas, anything from across the internet, each saved as a card with its picture. Installable app (PWA) on Firebase.
 
 - Share any link from Instagram or Chrome (Pixel) straight into the list. Mac Chrome uses a bookmarklet.
-- Sign in with an email code. Only emails in the `members` table can read or write.
-- Instagram posts show as photos in the grid and as the real embedded post in the detail sheet.
-- Code is public. Data (docs table) and photos live in Supabase behind login.
+- Saving a link creates a card at once; the `preview` Cloud Function then fills in its title, description and picture, and keeps a copy of the picture in Storage so it never breaks when the original link expires.
+- Cards with no picture show "Add picture": open the card to upload a photo, paste a screenshot, or paste an image link. "Fetch N missing pictures" in the header fills older saves.
+- Sign in with Google; you stay signed in on the device. Access is a list of `members/<email>` docs in Firestore with a role (owner, editor, viewer).
 
 ## Files
-- `tokyo.js`: the Tokyo trip view (static content, no personal data). Opens from the Tokyo button in the header, and stands alone, no login, at `tokyo.html`.
-- `index.html`: the whole UI. `supa.js`: login, doc store, realtime. `config.js`: project URL and public anon key.
-- `sql/schema.sql`: tables, row-level security, realtime, photo bucket.
-- Import data (`docs.csv`) and photo sheets are private and kept out of this repo: `~/shortlist-seed/`.
+- `index.html`: the whole UI. `fb.js`: sign-in, Firestore doc store, picture upload, preview call. `config.js`: Firebase web config (public by design).
+- `functions/index.js`: the `preview` callable function (region asia-south1).
+- `firestore.rules`, `storage.rules`: access rules. `firebase.json`: hosting, rules and functions config.
+- `sheets/` (photo sprite sheets of saved Instagram posts) and seed data are private and kept out of this repo; they are deployed with hosting from the owner's machine.
 - `manifest.webmanifest`, `sw.js`, `icons/`: install and share-target support.
 
-## Setup (once)
-1. supabase.com, New project (name it shortlist). Auth > Providers > Email: keep enabled. Auth > URL Configuration: Site URL = `https://gattooze.github.io/shortlist/`.
-2. SQL Editor: paste `sql/schema.sql`, run. Then run the `insert into public.members ...` line with real emails.
-3. Table Editor > `docs` > Insert > Import data from CSV: `docs.csv`.
-4. Storage > `sheets` bucket > upload every file in the `sheets/` folder.
-5. Project Settings > API: copy Project URL and the anon public key into `config.js`, commit.
-6. GitHub repo Settings > Pages > Deploy from branch `main`, root. App is at `https://gattooze.github.io/shortlist/`.
-7. On the Pixel open that URL in Chrome, Install app. Share from Instagram now offers Shortlist.
+## Deploy
+`firebase deploy --project <shortlist project id>` from this folder (with `sheets/` present). Always pass `--project`.
 
 ## Switching backend later
-Only `supa.js` talks to Supabase. `index.html` uses a small interface and nothing else:
-- `boot()` resolves `{ db, user, id }` (shows the login screen itself), or `null` if not signed in or not allowed.
-- `db.collection(name).onSnapshot(cb)` and `.add(doc)`; `db.doc('coll/id').onSnapshot / set / update / delete`. `cb` gets `{ docs: [{ id, data() }] }` for collections and `{ id, exists, data() }` for single docs.
-- `SHEET_BASE`: URL prefix where the photo sheets (`sNN.jpg`) are served.
-To move to Firebase, Cloudflare D1 or anything else, rewrite `supa.js` to the same shape, change `SHEET_BASE`, and re-import `docs.csv` (columns `coll,id,data` where `data` is JSON). `sql/schema.sql` is the only Supabase-specific schema.
+Only `fb.js` talks to Firebase. `index.html` uses a small interface: `boot()` resolves `{ db, user, id }` or `null`; `db.collection(name).onSnapshot(cb)` and `.add(doc)`; `db.doc('coll/id').onSnapshot / set / update / delete`; plus `preview()`, `uploadImage()` and `SHEET_BASE`.
