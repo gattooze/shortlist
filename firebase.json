@@ -31,7 +31,9 @@
       "**/.*",
       "supa.js",
       "sql/**",
-      "config.example.js"
+      "config.example.js",
+      "tokyo.js",
+      "tokyo.html"
     ],
     "headers": [
       {

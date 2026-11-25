@@ -266,7 +266,7 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
   <header class="top">
     <div class="brandrow">
       <h1 class="mark">Shortlist</h1>
-      <nav class="views" aria-label="View"><button id="vItems" class="on" type="button">Saved</button><button id="vBrands" type="button">Brands</button><button id="vTokyo" type="button">Tokyo</button></nav>
+      <nav class="views" aria-label="View"><button id="vItems" class="on" type="button">Saved</button><button id="vBrands" type="button">Brands</button></nav>
       <span class="spacer"></span>
       <button id="inboxBtn" class="pillbtn warn" type="button" hidden></button>
       <button id="imgBtn" class="pillbtn" type="button" hidden></button>
@@ -300,7 +300,6 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 
 <script type="module">
 import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
-import { mountTokyo } from './tokyo.js';
 (async function () {
   const TOPS = ['Wear', 'Home & Decor', 'Gifts', 'Eat & Drink', 'Places & Stays', 'Ideas & Tips', 'Kids', 'Services & Vendors', 'Art', 'Games & Fun', 'Music & Artists', 'Beauty', 'Tech', 'Other'];
   const GO_TOPS = ['Eat & Drink', 'Places & Stays'];
@@ -495,12 +494,7 @@ import { mountTokyo } from './tokyo.js';
   function render() {
     $('#vItems').classList.toggle('on', view.tab === 'items');
     $('#vBrands').classList.toggle('on', view.tab === 'brands');
-    $('#vTokyo').classList.toggle('on', view.tab === 'tokyo');
-    const tk = view.tab === 'tokyo';
-    $('#addForm').hidden = tk || !canWrite;
-    $('.search').hidden = tk;
-    $('#tops').hidden = tk; $('#filters').hidden = tk;
-    if (tk) { $('#subs').hidden = true; $('#occ').hidden = true; }
+    $('#addForm').hidden = !canWrite;
     const ib = $('#inboxBtn');
     ib.hidden = !inbox.length;
     ib.textContent = inbox.length + ' to sort';
@@ -509,8 +503,7 @@ import { mountTokyo } from './tokyo.js';
     $('#imgBtn').textContent = 'Fetch ' + mi + ' missing pictures';
     renderInbox();
     renderCapture();
-    if (tk) { $('#tops').replaceChildren(); $('#subs').replaceChildren(); $('#filters').replaceChildren(); $('#occ').replaceChildren(); mountTokyo($('#body')); }
-    else if (view.tab === 'brands') renderBrands(); else renderItems();
+    if (view.tab === 'brands') renderBrands(); else renderItems();
     renderCmpBar();
     if (view.sheet) { const a = document.activeElement; if (!(a && $('#sheet').contains(a))) renderSheet(); }
     if (view.cmpOpen) renderCmp();
@@ -838,7 +831,7 @@ import { mountTokyo } from './tokyo.js';
       const v = e.target.value.trim(); if (!v || i.occasions.includes(v)) return;
       upd(i.id, { occasions: i.occasions.concat(v) });
     } });
-    const notes = el('textarea', { id: 'notesIn', placeholder: 'Size, who it is for, why you saved it', disabled: !canWrite, text: i.notes || '', onblur: e => { if (e.target.value !== (i.notes || '')) upd(i.id, { notes: e.target.value }); } });
+    const notes = el('textarea', { id: 'notesIn', placeholder: 'Why you saved it, who it is for, anything to remember', disabled: !canWrite, text: i.notes || '', style: (i.notes || '').length > 300 ? 'min-height:50vh' : null, onblur: e => { if (e.target.value !== (i.notes || '')) upd(i.id, { notes: e.target.value }); } });
     const cat = el('input', { type: 'text', id: 'catIn', list: 'paths', value: i.path.join(' / '), disabled: !canWrite, onchange: e => {
       const p = e.target.value.split('/').map(x => x.trim()).filter(Boolean);
       if (p.length) upd(i.id, { path: p }); else e.target.value = i.path.join(' / ');
@@ -885,7 +878,6 @@ import { mountTokyo } from './tokyo.js';
   /* ---------- wiring ---------- */
   $('#vItems').onclick = () => { view.tab = 'items'; render(); };
   $('#vBrands').onclick = () => { view.tab = 'brands'; view.brand = null; render(); };
-  $('#vTokyo').onclick = () => { view.tab = 'tokyo'; render(); window.scrollTo(0, 0); };
   $('#inboxBtn').onclick = () => { view.inboxOpen = !view.inboxOpen; render(); };
   $('#imgBtn').onclick = () => { backfill(); render(); };
   /* paste a picture (or a link to one) while a card is open to use it as that card's picture */
