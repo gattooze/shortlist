@@ -46,7 +46,7 @@
         ]
       },
       {
-        "source": "sw.js",
+        "source": "**/*.@(js|html|webmanifest)",
         "headers": [
           {
             "key": "Cache-Control",
