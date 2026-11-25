@@ -144,6 +144,16 @@ main{display:grid;gap:14px;padding-top:14px}
 .imgtools .row2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .imgtools input[type=url]{flex:1;min-width:160px;font:inherit;font-size:13px;padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
 
+.catrow{display:grid;grid-template-columns:minmax(0,1fr) auto 36px 32px 32px 32px;gap:6px;align-items:center}
+.catrow input,.catrow select,#catsPanel>input,.catpick select,.kf input{font:inherit;font-size:14px;padding:7px 10px;border-radius:10px;border:1px solid var(--line);background:var(--bg);color:var(--ink);min-width:0}
+.catrow .fine{text-align:right}
+.catpick select{width:100%}
+.catpick.need{background:var(--gold-soft);border-radius:12px;padding:10px 12px}
+.kfs{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px}
+.kf{display:grid;gap:4px}
+.chip.warn{border-color:var(--gold);color:var(--gold)}
+.chip.ghostchip{border-style:dashed}
+
 /* grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:22px 16px}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 10px}}
@@ -286,6 +296,7 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
   <section id="inboxPanel" class="panel gold" hidden></section>
   <main>
     <div id="tops" class="chips tops"></div>
+    <section id="catsPanel" class="panel" hidden></section>
     <div id="subs" class="chips subs"></div>
     <div id="filters" class="filters"></div>
     <div id="occ" class="occ"></div>
@@ -301,10 +312,13 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 <script type="module">
 import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
 (async function () {
-  const TOPS = ['Wear', 'Home & Decor', 'Gifts', 'Eat & Drink', 'Places & Stays', 'Ideas & Tips', 'Kids', 'Services & Vendors', 'Art', 'Games & Fun', 'Music & Artists', 'Beauty', 'Tech', 'Other'];
-  const GO_TOPS = ['Eat & Drink', 'Places & Stays'];
-  const TIP_TOPS = ['Ideas & Tips'];
-  const BANDS = [['u5', 'Under ₹5k', 0, 5000], ['5', '₹5k to ₹10k', 5000, 10000], ['10', '₹10k to ₹20k', 10000, 20000], ['20', '₹20k and up', 20000, Infinity]];
+  /* categories are data (config/categories), edited in the app. Each has a kind that decides its extra fields and status words:
+     thing (price, brand), place (area), idea, other. These defaults only seed the list the first time. */
+  const DEFAULT_CATS = [['Home & Decor', 'thing'], ['Wear', 'thing'], ['Eat & Drink', 'place'], ['Places & Stays', 'place'], ['Travel', 'place'], ['Ideas & Tips', 'idea'], ['Gifts', 'thing'], ['Kids', 'thing'], ['Beauty', 'thing'], ['Tech', 'thing'], ['Art', 'thing'], ['Music & Artists', 'idea'], ['Games & Fun', 'idea'], ['Services & Vendors', 'other'], ['Other', 'other']].map(([name, kind]) => ({ name, kind }));
+  const KINDS = { thing: 'Things', place: 'Places', idea: 'Ideas and reads', other: 'Other' };
+  let cats = DEFAULT_CATS, catsSaved = false;
+  const kindOf = top => ((cats.find(c => c.name === top) || {}).kind) || 'other';
+  const BANDS = [['u5', 'Under 5k', 0, 5000], ['5', '5k to 10k', 5000, 10000], ['10', '10k to 20k', 10000, 20000], ['20', '20k and up', 20000, Infinity]];
   /* replaceChildren takes nodes, not arrays: let it accept nested lists and skip empty slots */
   const rc = Element.prototype.replaceChildren;
   Element.prototype.replaceChildren = function (...k) { return rc.apply(this, k.flat(Infinity).filter(c => c != null && c !== false)); };
@@ -476,6 +490,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       if (skip !== 'occ' && view.occ && !i.occasions.includes(view.occ)) return false;
       if (skip !== 'band' && view.band) { const b = bandOf(view.band); if (!(b && i.price != null && i.price >= b[2] && i.price < b[3])) return false; }
       if (view.stockOnly && i.stock === 'out') return false;
+      if (skip !== 'tag' && view.tag && !(i.tags || []).includes(view.tag)) return false;
       if (view.brand && slug(i.brand) !== view.brand) return false;
       if (view.src === 'manual' && i.src === 'ig') return false;
       if (view.src === 'ig' && i.src !== 'ig') return false;
@@ -485,10 +500,43 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
   }
   const scopeOf = list => list.filter(i => (!view.top || i.path[0] === view.top) && view.sub.every((p, k) => i.path[k + 1] === p));
   const countBy = (list, fn) => { const m = new Map(); list.forEach(i => { const k = fn(i); if (k != null) m.set(k, (m.get(k) || 0) + 1); }); return m; };
-  const statusLabels = top => GO_TOPS.includes(top)
-    ? { want: 'To try', shortlist: 'Shortlisted', done: 'Been', passed: 'Passed' }
-    : TIP_TOPS.includes(top) ? { want: 'Saved', shortlist: 'Starred', done: 'Used', passed: 'Skip' }
-    : { want: 'Want', shortlist: 'Shortlisted', done: 'Bought', passed: 'Passed' };
+  const statusLabels = top => {
+    const k = top ? kindOf(top) : 'other';
+    if (k === 'place') return { want: 'To try', shortlist: 'Shortlisted', done: 'Been', passed: 'Passed' };
+    if (k === 'thing') return { want: 'Want', shortlist: 'Shortlisted', done: 'Got it', passed: 'Passed' };
+    return { want: 'Saved', shortlist: 'Starred', done: 'Done', passed: 'Skip' };
+  };
+
+  /* ---------- auto-suggested category: learn from what is already filed ---------- */
+  let model = null, modelN = -1;
+  const toks = t => String(t || '').toLowerCase().replace(/https?:\/\/\S+/g, ' ').split(/[^a-z0-9]+/).filter(w => w.length > 2 && !STOP.has(w));
+  const STOP = new Set('the and for with from this that your you are was our how what why new all best top ideas idea www com http https instagram reel post'.split(' '));
+  function buildModel() {
+    const by = new Map(), hosts = new Map(), vocab = new Set();
+    for (const i of items) {
+      const top = i.path[0]; if (!top || top === 'Unsorted') continue;
+      const m = by.get(top) || { n: 0, w: new Map(), total: 0 }; m.n++;
+      for (const w of toks([i.title, i.brand, i.summary, (i.tags || []).join(' ')].join(' '))) { m.w.set(w, (m.w.get(w) || 0) + 1); m.total++; vocab.add(w); }
+      by.set(top, m);
+      const h = host(i.url); if (h && i.src !== 'ig') { const hm = hosts.get(h) || new Map(); hm.set(top, (hm.get(top) || 0) + 1); hosts.set(h, hm); }
+    }
+    return { by, hosts, V: vocab.size || 1 };
+  }
+  function suggest(i) {
+    if (!model || modelN !== items.length) { model = buildModel(); modelN = items.length; }
+    const scores = [];
+    const words = toks([i.title, i.summary, i.siteName, i.notes].join(' '));
+    const hm = model.hosts.get(host(i.url));
+    const N = [...model.by.values()].reduce((a, m) => a + m.n, 0) || 1;
+    for (const [top, m] of model.by) {
+      if (!cats.some(c => c.name === top)) continue;
+      let sc = Math.log(m.n / N);
+      for (const w of words) sc += Math.log(((m.w.get(w) || 0) + 1) / (m.total + model.V));
+      if (hm && hm.get(top)) sc += 4 * Math.log(1 + hm.get(top));
+      scores.push([top, sc]);
+    }
+    return scores.sort((a, c) => c[1] - a[1]).slice(0, 3).map(x => x[0]);
+  }
 
   /* ---------- top level render ---------- */
   function render() {
@@ -505,7 +553,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     renderCapture();
     if (view.tab === 'brands') renderBrands(); else renderItems();
     renderCmpBar();
-    if (view.sheet) { const a = document.activeElement; if (!(a && $('#sheet').contains(a))) renderSheet(); }
+    if (view.sheet) { const a = document.activeElement; if (!(a && $('#sheet').contains(a) && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.type !== 'file')) renderSheet(); }
     if (view.cmpOpen) renderCmp();
   }
 
@@ -559,15 +607,17 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
 
   function renderItems() {
     const topsEl = $('#tops'), subsEl = $('#subs'), fEl = $('#filters'), oEl = $('#occ'), body = $('#body');
-    const fkey = [view.top, view.sub.join('>'), view.q, view.occ, view.band, view.status, view.stockOnly, view.brand, view.src, view.sort].join('|');
+    const fkey = [view.top, view.sub.join('>'), view.q, view.occ, view.band, view.tag, view.status, view.stockOnly, view.brand, view.src, view.sort].join('|');
     if (fkey !== view.fkey) { view.fkey = fkey; view.limit = 60; }
     const b = baseFilter();
     const topCounts = countBy(b, i => i.path[0]);
-    const topNames = [...new Set([...TOPS.filter(t => topCounts.has(t)), ...topCounts.keys()])];
+    const topNames = [...new Set([...(topCounts.has('Unsorted') ? ['Unsorted'] : []), ...cats.map(c => c.name).filter(t => topCounts.has(t)), ...topCounts.keys()])];
     if (view.top && !items.some(i => i.path[0] === view.top)) { view.top = null; view.sub = []; }
     topsEl.replaceChildren(
       el('button', { class: 'chip' + (!view.top ? ' on' : ''), type: 'button', onclick: () => { view.top = null; view.sub = []; render(); } }, 'All', el('span', { class: 'c', text: b.length })),
-      topNames.map(t => el('button', { class: 'chip' + (view.top === t ? ' on' : ''), type: 'button', onclick: () => { view.top = t; view.sub = []; render(); } }, t, el('span', { class: 'c', text: topCounts.get(t) }))));
+      topNames.map(t => el('button', { class: 'chip' + (view.top === t ? ' on' : '') + (t === 'Unsorted' ? ' warn' : ''), type: 'button', onclick: () => { view.top = t; view.sub = []; render(); } }, t, el('span', { class: 'c', text: topCounts.get(t) }))),
+      canWrite ? el('button', { class: 'chip ghostchip', type: 'button', onclick: () => { view.catsOpen = !view.catsOpen; render(); }, text: view.catsOpen ? 'Done editing' : 'Edit categories' }) : null);
+    renderCats();
 
     const scope = scopeOf(b);
     const kids = countBy(scope, i => i.path[view.sub.length + 1]);
@@ -585,7 +635,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     const sl = statusLabels(view.top);
     const segBtn = (key, label) => el('button', { type: 'button', class: view.status === key ? 'on' : '', onclick: () => { view.status = key; render(); }, text: label });
     const bandCounts = countBy(scopeOf(baseFilter('band')).filter(i => i.price != null), i => (BANDS.find(x => i.price >= x[2] && i.price < x[3]) || [])[0]);
-    const priceSel = bandCounts.size >= 2 || view.band ? el('select', { id: 'bandSel', 'aria-label': 'Price range', onchange: e => { view.band = e.target.value || null; render(); } },
+    const priceSel = view.top && kindOf(view.top) === 'thing' && (bandCounts.size >= 2 || view.band) ? el('select', { id: 'bandSel', 'aria-label': 'Price range', onchange: e => { view.band = e.target.value || null; render(); } },
       el('option', { value: '', text: 'Any price' }), BANDS.filter(x => bandCounts.has(x[0]) || view.band === x[0]).map(x => el('option', { value: x[0], selected: view.band === x[0], text: x[1] + ' (' + (bandCounts.get(x[0]) || 0) + ')' }))) : null;
     const sortSel = el('select', { id: 'sortSel', 'aria-label': 'Sort', onchange: e => { view.sort = e.target.value; render(); } },
       [['new', 'Newest'], ['lo', 'Price: low to high'], ['hi', 'Price: high to low']].map(([v, t]) => el('option', { value: v, selected: view.sort === v, text: t })));
@@ -593,14 +643,17 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     const srcSel = items.some(i => i.src === 'ig') ? el('select', { id: 'srcSel', 'aria-label': 'Source', onchange: e => { view.src = e.target.value; render(); } },
       el('option', { value: '', text: 'All sources' }), el('option', { value: 'manual', selected: view.src === 'manual', text: 'Added by you' }), el('option', { value: 'ig', selected: view.src === 'ig', text: 'Instagram saved' }),
       [...folderCounts].sort((a, c) => c[1] - a[1]).map(([f, n]) => el('option', { value: 'f:' + f, selected: view.src === 'f:' + f, text: 'Folder: ' + f + ' (' + n + ')' }))) : null;
+    const tagCounts = countBy(scopeOf(baseFilter('tag')).flatMap(i => (i.tags || []).map(t => ({ t }))), x => x.t);
+    const tagSel = tagCounts.size ? el('select', { id: 'tagSel', 'aria-label': 'Tag', onchange: e => { view.tag = e.target.value || null; render(); } },
+      el('option', { value: '', text: 'Any tag' }), [...tagCounts].sort((a, c) => c[1] - a[1]).slice(0, 80).map(([t, n]) => el('option', { value: t, selected: view.tag === t, text: t + ' (' + n + ')' }))) : null;
     const stockChk = el('input', { type: 'checkbox', id: 'stockChk', onchange: e => { view.stockOnly = e.target.checked; render(); } });
     stockChk.checked = view.stockOnly;
     const lay = (k, t) => el('button', { type: 'button', class: view.layout === k ? 'on' : '', 'aria-label': t, title: t, onclick: () => { view.layout = k; try { localStorage.setItem('sl-layout', k); } catch (e) {} render(); }, text: k === 'grid' ? '▦' : '☰' });
     fEl.replaceChildren(
       el('div', { class: 'fgroup' },
         el('div', { class: 'seg' }, segBtn('open', 'Open'), segBtn('done', sl.done), segBtn('passed', 'Passed'), segBtn('all', 'All')),
-        priceSel, srcSel,
-        el('label', { class: 'tgl' }, stockChk, 'In stock'),
+        priceSel, tagSel, srcSel,
+        view.top && kindOf(view.top) === 'thing' ? el('label', { class: 'tgl' }, stockChk, 'In stock') : null,
         view.brand ? el('button', { class: 'tag-x', type: 'button', onclick: () => { view.brand = null; render(); }, text: 'Brand: ' + ((items.find(i => slug(i.brand) === view.brand) || {}).brand || '') + ' ×' }) : null),
       el('div', { class: 'fgroup' },
         el('button', { class: 'pillbtn', type: 'button', style: view.compare ? 'background:var(--accent);color:var(--accent-ink);border-color:var(--accent)' : null, onclick: () => { view.compare = !view.compare; if (!view.compare) view.cmp.clear(); render(); }, text: view.compare ? 'Done comparing' : 'Compare' }),
@@ -618,7 +671,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     view.order = list.map(i => i.id);
 
     const parts = [];
-    const plain = !view.q && !view.occ && !view.brand && !view.band && !view.stockOnly;
+    const plain = !view.q && !view.occ && !view.brand && !view.band && !view.tag && !view.stockOnly;
     if (loaded && db && items.length && plain) {
       const tl = tileLevel(scopeOf(b));
       if (tl.kids.size >= 2) {
@@ -781,6 +834,51 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
   }
   function closeCmp() { view.cmpOpen = false; $('#cmp').hidden = true; }
 
+  /* ---------- categories editor ---------- */
+  const saveCats = list => db.doc('config/categories').set({ list: list.map(c => ({ name: c.name, kind: c.kind })) }).catch(() => toast('Could not save categories.'));
+  /* move every item from one top category to another (rename, merge or delete) */
+  async function moveTop(from, to) {
+    const hit = items.filter(i => i.path[0] === from);
+    let n = 0;
+    for (const i of hit) { await upd(i.id, { path: [to].concat(i.path.slice(1)) }); if (++n % 25 === 0) toast('Moved ' + n + ' of ' + hit.length); }
+    return hit.length;
+  }
+  function renderCats() {
+    const p = $('#catsPanel');
+    p.hidden = !view.catsOpen || view.tab !== 'items';
+    if (p.hidden) return;
+    const counts = countBy(items, i => i.path[0]);
+    const extra = [...counts.keys()].filter(t => t !== 'Unsorted' && !cats.some(c => c.name === t));
+    const list = cats.concat(extra.map(name => ({ name, kind: 'other' })));
+    const commit = l => { cats = l; saveCats(l); render(); };
+    const row = (c, k) => {
+      const name = el('input', { type: 'text', value: c.name, 'aria-label': 'Category name', onchange: async e => {
+        const v = e.target.value.trim(); if (!v || v === c.name) { e.target.value = c.name; return; }
+        const exists = list.some(x => x.name === v);
+        const l = list.filter(x => x.name !== c.name || !exists).map(x => x.name === c.name ? Object.assign({}, x, { name: v }) : x);
+        commit(l); const n = await moveTop(c.name, v); toast((exists ? 'Merged into ' : 'Renamed to ') + v + (n ? ' · ' + n + ' items moved' : ''));
+      } });
+      const kind = el('select', { 'aria-label': 'Kind', onchange: e => commit(list.map(x => x.name === c.name ? Object.assign({}, x, { kind: e.target.value }) : x)) },
+        Object.entries(KINDS).map(([v, t]) => el('option', { value: v, selected: c.kind === v, text: t })));
+      const mv = d => { const l = list.slice(); const j = k + d; if (j < 0 || j >= l.length) return; [l[k], l[j]] = [l[j], l[k]]; commit(l); };
+      return el('div', { class: 'catrow' }, name, kind, el('span', { class: 'fine', text: (counts.get(c.name) || 0) + '' }),
+        el('button', { type: 'button', class: 'sq', 'aria-label': 'Move up', onclick: () => mv(-1), text: '↑' }),
+        el('button', { type: 'button', class: 'sq', 'aria-label': 'Move down', onclick: () => mv(1), text: '↓' }),
+        el('button', { type: 'button', class: 'sq', 'aria-label': 'Delete ' + c.name, onclick: async e => {
+          const n = counts.get(c.name) || 0;
+          if (n && e.target.dataset.armed !== '1') { e.target.dataset.armed = '1'; e.target.textContent = '!'; toast('Tap again: its ' + n + ' items move to Unsorted.'); return; }
+          commit(list.filter(x => x.name !== c.name)); if (n) { await moveTop(c.name, 'Unsorted'); toast(n + ' items moved to Unsorted.'); }
+        }, text: '×' }));
+    };
+    const add = el('input', { type: 'text', placeholder: 'New category, press Enter', onkeydown: e => {
+      if (e.key !== 'Enter') return; e.preventDefault(); const v = e.target.value.trim();
+      if (v && !list.some(x => x.name === v) && v !== 'Unsorted') commit(list.concat({ name: v, kind: 'other' }));
+    } });
+    p.replaceChildren(el('h2', { text: 'Categories' }),
+      el('div', { class: 'fine', text: 'Rename to rename everywhere, or type an existing name to merge. The kind decides the extra fields (price for things, area for places) and the status words.' }),
+      list.map(row), add);
+  }
+
   /* ---------- detail sheet ---------- */
   function openSheet(id) { view.sheet = id; $('#scrim').hidden = false; $('#sheet').hidden = false; renderSheet(); $('#sheet').scrollTop = 0; }
   function closeSheet() { view.sheet = null; $('#scrim').hidden = true; $('#sheet').hidden = true; }
@@ -815,6 +913,42 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
         el('button', { type: 'button', class: 'pillbtn', onclick: () => file.click(), text: has ? 'Change picture' : 'Upload picture' }),
         safeUrl(i.url) && i.src !== 'ig' ? el('button', { type: 'button', class: 'pillbtn', disabled: !!i.fetching, onclick: () => { upd(i.id, { fetching: true }); enrich(i.id, i.url, false); }, text: 'Fetch from link' }) : null,
         link, file));
+  }
+
+  /* top-level category as a picker, with suggestions for anything still unsorted */
+  function catPick(i) {
+    const unsorted = i.path[0] === 'Unsorted';
+    const names = cats.map(c => c.name);
+    if (!names.includes(i.path[0]) && !unsorted) names.push(i.path[0]);
+    const sel = el('select', { 'aria-label': 'Category', disabled: !canWrite, onchange: e => upd(i.id, { path: [e.target.value].concat(unsorted ? [] : i.path.slice(1)) }) },
+      unsorted ? el('option', { value: 'Unsorted', selected: true, text: 'Unsorted: pick a category' }) : null,
+      names.map(n => el('option', { value: n, selected: i.path[0] === n, text: n })));
+    const sug = unsorted && canWrite ? suggest(i) : [];
+    return el('div', { class: unsorted ? 'catpick need' : 'catpick' }, el('div', { class: 'lbl', text: 'Category' }), sel,
+      sug.length ? el('div', { class: 'chips', style: 'margin-top:8px' }, el('span', { class: 'fine', text: 'Suggested:' }),
+        sug.map(t => el('button', { type: 'button', class: 'chip', onclick: () => upd(i.id, { path: [t] }), text: t }))) : null);
+  }
+  /* optional fields that depend on the kind of category */
+  function kindFields(i) {
+    const k = kindOf(i.path[0]);
+    const field = (key, label, ph, num) => el('label', { class: 'kf' }, el('span', { class: 'lbl', text: label }),
+      el('input', { type: num ? 'number' : 'text', inputmode: num ? 'decimal' : null, value: i[key] == null ? '' : i[key], placeholder: ph, disabled: !canWrite, onchange: e => {
+        const v = e.target.value.trim(); upd(i.id, { [key]: v === '' ? null : num ? Number(v) : v });
+      } }));
+    if (k === 'thing') return el('div', { class: 'kfs' }, field('brand', 'Brand or maker', 'Optional'), field('price', 'Price', 'Optional', true));
+    if (k === 'place') return el('div', { class: 'kfs' }, field('area', 'Area or city', 'e.g. Bandra, Tokyo'));
+    return null;
+  }
+  function tagEdit(i) {
+    const tags = i.tags || [];
+    const input = el('input', { type: 'text', placeholder: 'Add a tag, press Enter', disabled: !canWrite, list: 'tagList', onkeydown: e => {
+      if (e.key !== 'Enter') return; e.preventDefault();
+      const v = e.target.value.trim().toLowerCase(); if (!v || tags.includes(v)) return; Promise.resolve(upd(i.id, { tags: tags.concat(v) })).then(() => { renderSheet(); const n = $('#sheet input[list=tagList]'); if (n) n.focus(); });
+    } });
+    const all = [...new Set(items.flatMap(x => x.tags || []))].slice(0, 400);
+    return el('div', null, el('div', { class: 'lbl', text: 'Tags' }),
+      el('div', { class: 'chips', style: 'margin-bottom:8px' }, tags.map(t => el('span', { class: 'tag-x' }, t, canWrite ? el('button', { type: 'button', 'aria-label': 'Remove ' + t, style: 'border:0;background:none;color:inherit;padding:0 0 0 6px', text: '×', onclick: () => upd(i.id, { tags: tags.filter(x => x !== t) }) }) : null))),
+      input, el('datalist', { id: 'tagList' }, all.map(t => el('option', { value: t }))));
   }
 
   function renderSheet() {
@@ -857,6 +991,8 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       safeUrl(i.url) ? el('a', { class: 'go', href: i.url, target: '_blank', rel: 'noopener', text: (i.src === 'ig' ? (i.parent ? 'Open @' + (i.handle || 'profile') + ' on Instagram' : 'Open Instagram post') : 'Open on ' + host(i.url)) + ' ↗' }) : null,
       igEmbed(i),
       linkRow(i),
+      catPick(i),
+      kindFields(i),
       el('div', null, el('div', { class: 'lbl', text: 'Status' }), el('div', { class: 'seg' }, stBtn('want', sl.want), stBtn('shortlist', '★ ' + sl.shortlist), stBtn('done', sl.done), stBtn('passed', 'Passed'))),
       i.facts.length ? el('div', null, el('div', { class: 'lbl', text: 'Details' }), el('dl', { class: 'facts' },
         [...fx.m].map(([k, v]) => [el('dt', { text: k }), el('dd', { text: v })]),
@@ -865,9 +1001,10 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       el('div', null, el('div', { class: 'lbl', text: 'Occasions' }),
         el('div', { class: 'chips', style: 'margin-bottom:8px' }, i.occasions.map(o => el('span', { class: 'tag-x' }, o, canWrite ? el('button', { type: 'button', 'aria-label': 'Remove ' + o, style: 'border:0;background:none;color:inherit;padding:0 0 0 6px', text: '×', onclick: () => upd(i.id, { occasions: i.occasions.filter(x => x !== o) }) }) : null))),
         occInput),
+      tagEdit(i),
       el('div', null, el('div', { class: 'lbl', text: 'Notes' }), notes),
       similar.length ? el('div', null, el('div', { class: 'lbl', text: 'More like this' }), el('div', { class: 'more' }, similar.map(x => el('button', { class: 'mini', type: 'button', onclick: () => openSheet(x.id) }, el('div', { class: 'p' }, vis(x)), el('span', { text: x.title }))))) : null,
-      el('div', null, el('div', { class: 'lbl', text: 'Category' }), cat, dl, el('div', { class: 'fine', style: 'margin-top:4px', text: 'Separate levels with a slash. Type a new path to create a category.' })),
+      el('div', null, el('div', { class: 'lbl', text: 'Sub-categories' }), cat, dl, el('div', { class: 'fine', style: 'margin-top:4px', text: 'Separate levels with a slash. Type a new path to create a category.' })),
       el('div', { class: 'fine', text: 'Saved ' + dateOf(i.addedAt) + (i.via === 'claude' ? ' · sorted by Claude' : '') }),
       canWrite ? el('button', { class: 'danger', type: 'button', onclick: e => {
         if (!armed) { armed = true; e.target.textContent = 'Tap again to remove for good'; setTimeout(() => { armed = false; if (e.target.isConnected) e.target.textContent = 'Remove from list'; }, 3500); return; }
@@ -935,6 +1072,11 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     db.collection('igshards').onSnapshot(s => { ig = s.docs.flatMap(d => ((d.data() || {}).items || []).map(x => norm(x.id, x))); first.s = true; done(); }, () => { first.s = true; done(); });
     db.collection('ov').onSnapshot(s => { ov = new Map(s.docs.map(d => [d.id, d.data()])); done(); }, () => {});
     db.collection('inbox').onSnapshot(s => { inbox = s.docs.map(d => Object.assign({ id: d.id }, d.data())).sort((a, c) => String(a.addedAt).localeCompare(String(c.addedAt))); render(); }, () => {});
+    db.doc('config/categories').onSnapshot(d => {
+      const l = d.exists && Array.isArray(d.data().list) ? d.data().list : null;
+      if (l && l.length) { cats = l; catsSaved = true; } else if (!catsSaved && canWrite) { catsSaved = true; saveCats(DEFAULT_CATS); }
+      model = null; render();
+    }, () => {});
     db.doc('config/capture').onSnapshot(d => { captureEmail = (d.exists && d.data().email) || ''; render(); }, () => {});
     db.collection('brands').onSnapshot(s => { brandDocs = s.docs.map(d => Object.assign({ id: d.id }, d.data())); if (view.tab === 'brands') render(); }, () => {});
   } else { loaded = true; render(); }
