@@ -324,7 +324,8 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
   const DEFAULT_CATS = [['Home & Decor', 'thing'], ['Wear', 'thing'], ['Eat & Drink', 'place'], ['Places & Stays', 'place'], ['Travel', 'place'], ['Ideas & Tips', 'idea'], ['Gifts', 'thing'], ['Kids', 'thing'], ['Beauty', 'thing'], ['Tech', 'thing'], ['Art', 'thing'], ['Music & Artists', 'idea'], ['Games & Fun', 'idea'], ['Services & Vendors', 'other'], ['Other', 'other']].map(([name, kind]) => ({ name, kind }));
   const KINDS = { thing: 'Things', place: 'Places', idea: 'Ideas and reads', other: 'Other' };
   let cats = DEFAULT_CATS, catsSaved = false;
-  /* collections cut across categories (e.g. Wedding, with groups Decor, Events, D&D). Items carry colls: ['Wedding/Decor'].
+  /* collections cut across categories (e.g. Wedding & Festive: wedding and festive decor and events, groups Decor, Events, D&D).
+     Items carry colls: ['Wedding & Festive/Decor']. A collection's occasions list says which occasion-tagged saves belong in it.
      Kept in config/collections; a pinned one shows at the top of Saved and can be unpinned or removed. */
   let colls = [], collsSaved = false;
   const inColl = (i, name, group) => (i.colls || []).some(c => group ? c === name + '/' + group : (c === name || c.startsWith(name + '/')));
@@ -736,7 +737,8 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     const all = baseFilter('cgroup');
     const gc = countBy(all.flatMap(i => (i.colls || []).filter(x => x.startsWith(c.name + '/')).map(x => ({ g: x.slice(c.name.length + 1) }))), x => x.g);
     const upd2 = patch => saveColls(colls.map(x => x.name === c.name ? Object.assign({}, x, patch) : x));
-    const occ = items.filter(i => (i.occasions || []).some(o => o.toLowerCase() === c.name.toLowerCase()) && !inColl(i, c.name));
+    const occNames = (c.occasions && c.occasions.length ? c.occasions : [c.name]).map(o => o.toLowerCase());
+    const occ = items.filter(i => (i.occasions || []).some(o => occNames.includes(o.toLowerCase())) && !inColl(i, c.name));
     const addGroup = el('input', { type: 'text', placeholder: 'New group, press Enter', onkeydown: e => {
       if (e.key !== 'Enter') return; e.preventDefault(); const v = e.target.value.trim(); if (v && !(c.groups || []).includes(v)) upd2({ groups: (c.groups || []).concat(v) });
     } });
@@ -758,7 +760,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
         canWrite ? addGroup : null),
       canWrite && occ.length ? el('button', { type: 'button', class: 'pillbtn warn', onclick: async () => {
         let n = 0; for (const i of occ) { await upd(i.id, { colls: (i.colls || []).concat(c.name) }); n++; } toast('Added ' + n + ' items to ' + c.name + '.');
-      }, text: 'Add the ' + occ.length + ' saves marked "' + c.name + '" to this collection' }) : null,
+      }, text: 'Add the ' + occ.length + ' saves tagged ' + (c.occasions && c.occasions.length ? c.occasions.slice(0, 4).join(', ') + (c.occasions.length > 4 ? ' and more' : '') : '"' + c.name + '"') + ' to this collection' }) : null,
       el('div', { class: 'fine', text: 'Open any card and use "Collections" to put it here or move it between groups.' }));
   }
   /* in the card: which collection and group it belongs to */
@@ -1161,7 +1163,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     db.doc('config/collections').onSnapshot(d => {
       const l = d.exists && Array.isArray(d.data().list) ? d.data().list : null;
       if (l) { colls = l; collsSaved = true; }
-      else if (!collsSaved && canWrite) { collsSaved = true; saveColls([{ name: 'Wedding', pinned: true, groups: ['Decor', 'Events', 'D&D'] }]); }
+      else if (!collsSaved && canWrite) { collsSaved = true; saveColls([{ name: 'Wedding & Festive', pinned: true, groups: ['Decor', 'Events', 'D&D'], occasions: ['Wedding', 'Sangeet', 'Festive', 'Diwali', 'Navratri', 'Ganesh Chaturthi', 'Holi', 'Rakhi', 'Lohri', 'Onam', 'Christmas'] }]); }
       render();
     }, () => {});
     db.doc('config/capture').onSnapshot(d => { captureEmail = (d.exists && d.data().email) || ''; render(); }, () => {});
