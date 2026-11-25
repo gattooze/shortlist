@@ -38,7 +38,9 @@ async function login() {
       try {
         await setPersistence(auth, browserLocalPersistence);
         const p = new GoogleAuthProvider(); p.setCustomParameters({ prompt: 'select_account' });
-        /* installed apps on phones block popups: fall back to a full-page redirect */
+        /* installed app (standalone) or ?signin=redirect: use a full-page redirect; otherwise a popup, falling back to redirect */
+        const redirect = matchMedia('(display-mode: standalone)').matches || new URLSearchParams(location.search).get('signin') === 'redirect';
+        if (redirect) { await signInWithRedirect(auth, p); return; }
         try { await signInWithPopup(auth, p); } catch (err) { if (/popup/.test(err.code || '')) { await signInWithRedirect(auth, p); return; } throw err; }
         done();
       } catch (err) { msg.className = 'err'; msg.textContent = err.message || 'Something went wrong.'; btn.disabled = false; }

@@ -367,7 +367,9 @@ import { mountTokyo } from './tokyo.js';
   function rebuild() {
     const all = manual.concat(ig), out = [];
     for (const i of all) { const o = ov.get(i.id); const m = o ? Object.assign({}, i, o) : i; if (!m.hidden) out.push(m); }
-    items = out;
+    /* an item found inside a post shows the post's picture until it has its own */
+    const byId = new Map(out.map(i => [i.id, i]));
+    items = out.map(i => { if (imgOf(i) || !i.parent) return i; const p = byId.get(i.parent); return p && imgOf(p) ? Object.assign({}, i, { image: p.image, inherited: true }) : i; });
   }
   const view = { src: '', limit: 60, allBrands: false, fkey: '', tab: 'items', top: null, sub: [], q: '', occ: null, status: 'open', stockOnly: false, sort: 'new', brand: null, band: null, layout: 'grid',
     sheet: null, inboxOpen: false, capOpen: false, compare: false, cmp: new Set(), cmpOpen: false, order: [] };
@@ -438,7 +440,7 @@ import { mountTokyo } from './tokyo.js';
     catch (e) { toast('Could not use that image link. Try saving the image and uploading it.'); }
   }
   /* existing saves with a link but no picture: fetch them in the background, once each */
-  const missingImg = () => items.filter(i => !imgOf(i) && safeUrl(i.url) && !i.previewAt && !i.fetching);
+  const missingImg = () => items.filter(i => !imgOf(i) && !i.parent && safeUrl(i.url) && !i.previewAt && !i.fetching);
   let backfilling = false;
   async function backfill() {
     if (backfilling) return; backfilling = true;
