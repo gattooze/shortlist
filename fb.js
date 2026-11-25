@@ -4,8 +4,7 @@ import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.14.1/fireba
 import { getAuth, onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, signOut, browserLocalPersistence, setPersistence } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, collection, doc, onSnapshot, setDoc, updateDoc, deleteDoc, addDoc, getDoc } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-storage.js';
-import { getFunctions, httpsCallable } from 'https://www.gstatic.com/firebasejs/10.14.1/firebase-functions.js';
-import { FIREBASE_CONFIG, FUNCTIONS_REGION } from './config.js';
+import { FIREBASE_CONFIG } from './config.js';
 
 export const configured = !!(FIREBASE_CONFIG && FIREBASE_CONFIG.apiKey && !/YOUR-/.test(FIREBASE_CONFIG.apiKey));
 const app = configured ? initializeApp(FIREBASE_CONFIG) : null;
@@ -13,7 +12,6 @@ const auth = app && getAuth(app);
 /* local cache: the app opens instantly and works offline, then syncs */
 const fs = app && initializeFirestore(app, { localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }) });
 const store = app && getStorage(app);
-const fns = app && getFunctions(app, FUNCTIONS_REGION || 'asia-south1');
 /* sprite sheets of saved Instagram posts are served next to the app */
 export const SHEET_BASE = new URL('sheets/', location.href).href;
 
@@ -63,17 +61,18 @@ export const db = configured && {
     const r = doc(fs, path);
     return {
       onSnapshot: (cb, onErr) => onSnapshot(r, s => cb(wrapSnap(s)), onErr),
-      set: d => setDoc(r, d),
+      set: (d, opts) => setDoc(r, d, opts || {}),
       update: p => updateDoc(r, p),
       delete: () => deleteDoc(r),
     };
   },
 };
 
-/* the preview function reads a link's title and picture and keeps a copy of the picture in Storage */
-export async function preview(body) {
-  const r = await httpsCallable(fns, 'preview', { timeout: 30000 })(body);
-  return r.data || {};
+/* ask the server for a link's title and picture: write a job, and the `preview` function (a Firestore trigger)
+   fills the target doc in and deletes the job. Results arrive through the normal live listeners.
+   job: { target: 'items/<id>' | 'ov/<id>', url } or { target, imageUrl }; fresh: true lets it replace a placeholder title */
+export async function preview(job) {
+  await addDoc(collection(fs, 'jobs'), Object.assign({ by: auth.currentUser && auth.currentUser.uid, at: new Date().toISOString() }, job));
 }
 /* a photo the person pasted or picked: shrink it in the browser, then store it */
 export async function uploadImage(file) {

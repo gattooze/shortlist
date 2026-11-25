@@ -1,9 +1,8 @@
 // preview: given a link, return its title, description and preview picture, with the picture copied into
 // Storage so cards never depend on hotlinks (Instagram and many shops expire or block them).
-// call({ url }) -> { title, description, site, image, sourceImage }
-// call({ imageUrl }) -> { image }   (keep a copy of an image link the person pasted)
-// Only members with an owner or editor role (members/<email> in Firestore) may call it.
-import { onCall, HttpsError } from 'firebase-functions/v2/https';
+// Runs on Firestore jobs/<id> docs: { target, url, fresh } fills that item; { target, imageUrl } stores a pasted image;
+// { type: 'backfill' } walks saves without a picture. Only jobs written by owner/editor members are processed.
+import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { initializeApp } from 'firebase-admin/app';
 import { getFirestore } from 'firebase-admin/firestore';
 import { getStorage } from 'firebase-admin/storage';
@@ -129,24 +128,68 @@ async function storeImage(src, referer) {
   return `https://firebasestorage.googleapis.com/v0/b/${bucket.name}/o/${encodeURIComponent(path)}?alt=media&token=${token}`;
 }
 
-async function canEdit(auth) {
-  const email = auth && auth.token && auth.token.email && auth.token.email.toLowerCase();
-  if (!email || auth.token.email_verified !== true) return false;
-  const m = await getFirestore().doc(`members/${email}`).get();
+const db = getFirestore();
+const isImg = v => typeof v === 'string' && /^(https?:|data:|sp:|img:|\/)/.test(v);
+const host = u => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return ''; } };
+
+async function canEdit(uid) {
+  if (!uid) return false;
+  const { getAuth } = await import('firebase-admin/auth');
+  const u = await getAuth().getUser(uid).catch(() => null);
+  const email = u && u.emailVerified && u.email && u.email.toLowerCase();
+  if (!email) return false;
+  const m = await db.doc(`members/${email}`).get();
   return m.exists && ['owner', 'editor'].includes(m.data().role);
 }
 
-export const preview = onCall({ region: 'asia-south1', memory: '256MiB', timeoutSeconds: 30, maxInstances: 3 }, async req => {
-  if (!(await canEdit(req.auth))) throw new HttpsError('permission-denied', 'Not allowed');
-  const body = req.data || {};
-  if (body.imageUrl) {
-    const image = await storeImage(body.imageUrl).catch(() => null);
-    if (!image) throw new HttpsError('failed-precondition', 'Could not fetch that image');
-    return { image };
+/* fill one item (items/<id> or ov/<id>) from its link, or store a pasted image link as its picture */
+async function fill(target, job, current) {
+  const patch = { fetching: false, previewAt: new Date().toISOString() };
+  if (job.imageUrl) {
+    const image = await storeImage(job.imageUrl).catch(() => null);
+    if (image) Object.assign(patch, { image, needsImage: false }); else patch.imageError = 'Could not fetch that image link';
+  } else {
+    const t = publicHttpUrl(job.url || '');
+    const m = t ? await fetchMeta(t) : {};
+    const image = m.image && !isImg(current.image) ? await storeImage(m.image, t.href).catch(() => null) : null;
+    if (image) patch.image = image;
+    if (m.title && (job.fresh || !current.title || current.title === host(job.url) || current.title === 'Untitled')) patch.title = m.title.slice(0, 300);
+    if (m.description && !current.summary) patch.summary = m.description.slice(0, 600);
+    if (m.site && !current.siteName) patch.siteName = m.site;
+    patch.needsImage = !(image || isImg(current.image));
   }
-  const target = publicHttpUrl(body.url || '');
-  if (!target) throw new HttpsError('invalid-argument', 'Not a public web address');
-  const m = await fetchMeta(target);
-  const image = m.image ? await storeImage(m.image, target.href).catch(() => null) : null;
-  return { title: (m.title || '').slice(0, 300) || null, description: (m.description || '').slice(0, 600) || null, site: m.site || null, image, sourceImage: m.image || null };
+  await db.doc(target).set(patch, { merge: true });
+  return patch;
+}
+
+/* the backfill walks every save without a picture, a few per run, and queues the next run itself */
+async function backfillBatch(job) {
+  const done = new Set(job.done || []);
+  const [items, shards, ov] = await Promise.all([db.collection('items').get(), db.collection('igshards').get(), db.collection('ov').get()]);
+  const ovm = new Map(ov.docs.map(d => [d.id, d.data()]));
+  const all = items.docs.map(d => ({ id: d.id, target: `items/${d.id}`, ...d.data() }))
+    .concat(shards.docs.flatMap(d => (d.data().items || []).map(i => ({ ...i, ...(ovm.get(i.id) || {}), target: `ov/${i.id}` }))));
+  const todo = all.filter(i => !isImg(i.image) && !i.parent && !i.previewAt && !i.hidden && publicHttpUrl(i.url || '') && !done.has(i.id));
+  const batch = todo.slice(0, 12);
+  for (const i of batch) { await fill(i.target, { url: i.url }, i).catch(() => null); await new Promise(r => setTimeout(r, 800)); }
+  await db.doc('config/backfill').set({ left: Math.max(0, todo.length - batch.length), at: new Date().toISOString() });
+  if (todo.length > batch.length) await db.collection('jobs').add({ type: 'backfill', by: job.by, at: new Date().toISOString() });
+}
+
+/* a member writes jobs/<id>; this runs inside Google Cloud (no public endpoint), does the work, deletes the job */
+export const fillPreview = onDocumentCreated({ document: 'jobs/{id}', region: 'asia-south1', memory: '256MiB', timeoutSeconds: 300, maxInstances: 3 }, async event => {
+  const snap = event.data; if (!snap) return;
+  const job = snap.data() || {};
+  try {
+    if (!(await canEdit(job.by))) return;
+    if (job.type === 'backfill') { await backfillBatch(job); return; }
+    if (!/^(items|ov)\/[\w-]+$/.test(job.target || '')) return;
+    const cur = (await db.doc(job.target).get()).data() || {};
+    let base = cur;
+    if (job.target.startsWith('ov/')) {
+      const shard = (await db.collection('igshards').get()).docs.flatMap(d => d.data().items || []).find(i => i.id === job.target.slice(3)) || {};
+      base = { ...shard, ...cur };
+    }
+    await fill(job.target, job, base);
+  } finally { await snap.ref.delete().catch(() => null); }
 });

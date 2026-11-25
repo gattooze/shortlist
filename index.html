@@ -411,7 +411,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
   function upd(id, patch) {
     if (!db) return;
     chains[id] = (chains[id] || Promise.resolve()).then(() => {
-        if (id.startsWith('ig-')) { pend[id] = Object.assign({}, pend[id] || ov.get(id) || {}, patch); return db.doc('ov/' + id).set(pend[id]); }
+        if (id.startsWith('ig-')) return db.doc('ov/' + id).set(patch, { merge: true });
         return db.doc('items/' + id).update(patch);
       })
       .catch(e => toast(e && e.code === 'invalid_argument' ? 'Could not save. You may have view-only access.' : 'Could not save. Try again.'));
@@ -439,19 +439,12 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
   }
   /* one preview at a time, so a batch of saves does not hammer the function */
   let previewQ = Promise.resolve();
+  /* hand the link to the server; it fills title, picture and description into the item, then clears `fetching` */
+  const targetOf = id => (id.startsWith('ig-') ? 'ov/' : 'items/') + id;
   function enrich(id, url, fresh) {
     previewQ = previewQ.then(async () => {
-      const cur = items.find(x => x.id === id) || {};
-      const patch = { fetching: false, previewAt: new Date().toISOString() };
-      try {
-        const p = await preview({ url });
-        if (p.image && !imgOf(cur)) patch.image = p.image;
-        if (p.title && (fresh || !cur.title || cur.title === host(url) || cur.title === 'Untitled')) patch.title = p.title;
-        if (p.description && !cur.summary) patch.summary = p.description;
-        if (p.site && !cur.siteName) patch.siteName = p.site;
-        if (!p.image && !imgOf(cur)) patch.needsImage = true; else patch.needsImage = false;
-      } catch (e) { patch.needsImage = !imgOf(cur); }
-      await upd(id, patch);
+      try { if (!id.startsWith('ig-') || !(items.find(x => x.id === id) || {}).fetching) await upd(id, { fetching: true }); await preview({ target: targetOf(id), url, fresh: !!fresh }); }
+      catch (e) { await upd(id, { fetching: false, needsImage: true, previewAt: new Date().toISOString() }); }
     });
     return previewQ;
   }
@@ -460,18 +453,19 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     catch (e) { toast('Could not add that picture.'); }
   }
   async function setImageUrl(id, url) {
-    try { toast('Adding picture…'); const p = await preview({ imageUrl: url }); if (!p.image) throw 0; await upd(id, { image: p.image, needsImage: false }); toast('Picture added.'); }
+    try { await upd(id, { fetching: true }); await preview({ target: targetOf(id), imageUrl: url }); toast('Fetching that picture…'); }
     catch (e) { toast('Could not use that image link. Try saving the image and uploading it.'); }
   }
   /* existing saves with a link but no picture: fetch them in the background, once each */
   const missingImg = () => items.filter(i => !imgOf(i) && !i.parent && safeUrl(i.url) && !i.previewAt && !i.fetching);
   let backfilling = false;
+  /* one job starts a server-side walk over every save without a picture; progress shows from config/backfill */
+  let bfLeft = null;
   async function backfill() {
     if (backfilling) return; backfilling = true;
-    const todo = missingImg(); let n = 0;
-    toast('Fetching pictures for ' + todo.length + ' saves…');
-    for (const i of todo) { await enrich(i.id, i.url, false); n++; if (n % 5 === 0) toast(n + ' of ' + todo.length + ' done'); }
-    backfilling = false; toast('Done. ' + items.filter(x => x.needsImage).length + ' still need a picture: open one to add it by hand.'); render();
+    try { await db.collection('jobs').add({ type: 'backfill', by: myId, at: new Date().toISOString() }); toast('Fetching pictures in the background. You can close the app.'); }
+    catch (e) { toast('Could not start. You may have view-only access.'); backfilling = false; }
+    render();
   }
   /* old links still waiting in the inbox: turn each into a card with its picture, then clear it from the inbox */
   async function inboxToList() {
@@ -559,8 +553,10 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
     ib.hidden = !inbox.length;
     ib.textContent = inbox.length + ' to sort';
     const mi = loaded && canWrite && db ? missingImg().length : 0;
-    $('#imgBtn').hidden = !mi || backfilling;
-    $('#imgBtn').textContent = 'Fetch ' + mi + ' missing pictures';
+    const running = backfilling || (bfLeft && bfLeft.left > 0 && Date.now() - new Date(bfLeft.at).getTime() < 10 * 60e3);
+    $('#imgBtn').hidden = !mi && !running;
+    $('#imgBtn').disabled = !!running;
+    $('#imgBtn').textContent = running ? 'Fetching pictures… ' + (bfLeft ? bfLeft.left + ' left' : '') : 'Fetch ' + mi + ' missing pictures';
     renderInbox();
     renderCapture();
     if (view.tab === 'brands') renderBrands(); else renderItems();
@@ -1161,6 +1157,7 @@ import { boot, SHEET_BASE, preview, uploadImage } from './fb.js';
       if (l && l.length) { cats = l; catsSaved = true; } else if (!catsSaved && canWrite) { catsSaved = true; saveCats(DEFAULT_CATS); }
       model = null; render();
     }, () => {});
+    db.doc('config/backfill').onSnapshot(d => { bfLeft = d.exists ? d.data() : null; if (bfLeft && bfLeft.left === 0) backfilling = false; render(); }, () => {});
     db.doc('config/collections').onSnapshot(d => {
       const l = d.exists && Array.isArray(d.data().list) ? d.data().list : null;
       if (l) { colls = l; collsSaved = true; }

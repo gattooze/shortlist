@@ -14,6 +14,11 @@ service cloud.firestore {
       allow read: if isOwner() || (signedIn() && e == email());
       allow write: if isOwner();
     }
+    // work for the preview function: only editors, only as themselves; the function deletes each job when done
+    match /jobs/{id} {
+      allow create: if canEdit() && request.resource.data.by == request.auth.uid;
+      allow read, update, delete: if false;
+    }
     match /{coll}/{id} {
       allow read: if isMember();
       allow create, update, delete: if canEdit();
