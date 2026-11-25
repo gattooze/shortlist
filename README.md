@@ -23,6 +23,13 @@ A shared list of things to buy, eat, visit and gift. Installable app (PWA) on Su
 6. GitHub repo Settings > Pages > Deploy from branch `main`, root. App is at `https://gattooze.github.io/shortlist/`.
 7. On the Pixel open that URL in Chrome, Install app. Share from Instagram now offers Shortlist.
 
+## Pictures on every card (previews)
+Saving a link creates the card at once, then the `preview` Edge Function (`supabase/functions/preview/`) reads the page's title and preview image and copies the image into the public `thumbs` bucket, so pictures keep working after the original link expires. Cards with no picture show "Add picture": open the card to upload a photo, paste a screenshot, or paste an image link. "Fetch N missing pictures" in the header fills older saves.
+
+Setup (once):
+1. SQL Editor: run `sql/002_thumbs.sql` (adds the `thumbs` bucket and an upload policy; changes nothing existing).
+2. On your Mac, in this repo: `npx supabase login`, then `npx supabase functions deploy preview --project-ref YOUR-PROJECT-REF`. The function reads the project URL and keys from Supabase itself; no secrets go in the repo.
+
 ## Switching backend later
 Only `supa.js` talks to Supabase. `index.html` uses a small interface and nothing else:
 - `boot()` resolves `{ db, user, id }` (shows the login screen itself), or `null` if not signed in or not allowed.

@@ -137,6 +137,13 @@ main{display:grid;gap:14px;padding-top:14px}
 .tile{position:absolute;inset:0;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:44px;letter-spacing:-.02em;
   color:hsl(var(--h) 45% var(--tile-ink));background:linear-gradient(150deg,hsl(var(--h) var(--tile-s) var(--tile-l1)),hsl(calc(var(--h) + 34) var(--tile-s) var(--tile-l2)))}
 
+.tile.loading{animation:pulse 1.2s ease-in-out infinite alternate}
+@keyframes pulse{from{filter:saturate(.6) brightness(1)}to{filter:saturate(1) brightness(1.08)}}
+.imgtools{display:grid;gap:8px;margin-top:-4px}
+.imgtools.need{background:var(--gold-soft);border-radius:12px;padding:10px 12px}
+.imgtools .row2{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.imgtools input[type=url]{flex:1;min-width:160px;font:inherit;font-size:13px;padding:8px 10px;border-radius:999px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+
 /* grid */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(212px,1fr));gap:22px 16px}
 @media (max-width:520px){.grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px 10px}}
@@ -262,6 +269,7 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
       <nav class="views" aria-label="View"><button id="vItems" class="on" type="button">Saved</button><button id="vBrands" type="button">Brands</button><button id="vTokyo" type="button">Tokyo</button></nav>
       <span class="spacer"></span>
       <button id="inboxBtn" class="pillbtn warn" type="button" hidden></button>
+      <button id="imgBtn" class="pillbtn" type="button" hidden></button>
       <button id="capBtn" class="pillbtn" type="button" aria-expanded="false">Add from anywhere</button>
       <button id="themeBtn" class="pillbtn iconbtn" type="button" aria-label="Switch light or dark">◐</button>
     </div>
@@ -291,7 +299,7 @@ body.cmpon #toast{bottom:calc(76px + env(safe-area-inset-bottom,0px))}
 <div id="toast" role="status"></div>
 
 <script type="module">
-import { boot, SHEET_BASE } from './supa.js';
+import { boot, SHEET_BASE, preview, uploadImage } from './supa.js';
 import { mountTokyo } from './tokyo.js';
 (async function () {
   const TOPS = ['Wear', 'Home & Decor', 'Gifts', 'Eat & Drink', 'Places & Stays', 'Ideas & Tips', 'Kids', 'Services & Vendors', 'Art', 'Games & Fun', 'Music & Artists', 'Beauty', 'Tech', 'Other'];
@@ -332,7 +340,7 @@ import { mountTokyo } from './tokyo.js';
     }
     if (src && src.slice(0, 4) === 'img:') return el('img', { src: SHEET_BASE + 'img-' + src.slice(4) + '.jpg', alt: '', loading: 'lazy' });
     if (src) return el('img', { src, alt: '', loading: 'lazy' });
-    return el('span', { class: 'tile', style: '--h:' + hue(i.brand || i.title), text: ((i.brand || i.title || '?').trim()[0] || '?').toUpperCase() });
+    return el('span', { class: 'tile' + (i.fetching ? ' loading' : ''), style: '--h:' + hue(i.brand || i.title), text: i.fetching ? '' : ((i.brand || i.title || '?').trim()[0] || '?').toUpperCase() });
   }
 
   /* the real Instagram post, shown on demand inside the sheet (no stored photo needed) */
@@ -390,14 +398,64 @@ import { mountTokyo } from './tokyo.js';
     if (t && !/\s/.test(t) && /\.[a-z]{2,}/i.test(t)) return ['https://' + t];
     return [];
   }
-  async function addLinks(text, note) {
+  /* a saved link goes straight into the list as a card, then the preview function fills in its title and image */
+  async function addLinks(text, note, title) {
     const urls = extractUrls(text);
     if (!urls.length) { toast('No link found. Paste a full web address.'); return false; }
     try {
-      for (const url of urls) await db.collection('inbox').add({ url, note: note || '', addedBy: myId, addedAt: new Date().toISOString() });
-      toast(urls.length === 1 ? 'Saved. It will be sorted on the next pass.' : urls.length + ' links saved for sorting.');
+      for (const url of urls) {
+        const { id } = await db.collection('items').add({ url, title: (urls.length === 1 && title) || host(url), path: ['Unsorted'], status: 'want', notes: note || '', addedBy: myId, addedAt: new Date().toISOString(), via: 'save', fetching: true });
+        enrich(id, url, true);
+      }
+      toast(urls.length === 1 ? 'Saved. Fetching its picture.' : urls.length + ' links saved. Fetching pictures.');
       return true;
     } catch (e) { toast('Could not save. You may have view-only access.'); return false; }
+  }
+  /* one preview at a time, so a batch of saves does not hammer the function */
+  let previewQ = Promise.resolve();
+  function enrich(id, url, fresh) {
+    previewQ = previewQ.then(async () => {
+      const cur = items.find(x => x.id === id) || {};
+      const patch = { fetching: false, previewAt: new Date().toISOString() };
+      try {
+        const p = await preview({ url });
+        if (p.image && !imgOf(cur)) patch.image = p.image;
+        if (p.title && (fresh || !cur.title || cur.title === host(url) || cur.title === 'Untitled')) patch.title = p.title;
+        if (p.description && !cur.summary) patch.summary = p.description;
+        if (p.site && !cur.siteName) patch.siteName = p.site;
+        if (!p.image && !imgOf(cur)) patch.needsImage = true; else patch.needsImage = false;
+      } catch (e) { patch.needsImage = !imgOf(cur); }
+      await upd(id, patch);
+    });
+    return previewQ;
+  }
+  async function setImage(id, file) {
+    try { toast('Adding picture…'); await upd(id, { image: await uploadImage(file), needsImage: false }); toast('Picture added.'); }
+    catch (e) { toast('Could not add that picture.'); }
+  }
+  async function setImageUrl(id, url) {
+    try { toast('Adding picture…'); const p = await preview({ imageUrl: url }); if (!p.image) throw 0; await upd(id, { image: p.image, needsImage: false }); toast('Picture added.'); }
+    catch (e) { toast('Could not use that image link. Try saving the image and uploading it.'); }
+  }
+  /* existing saves with a link but no picture: fetch them in the background, once each */
+  const missingImg = () => items.filter(i => !imgOf(i) && safeUrl(i.url) && !i.previewAt && !i.fetching);
+  let backfilling = false;
+  async function backfill() {
+    if (backfilling) return; backfilling = true;
+    const todo = missingImg(); let n = 0;
+    toast('Fetching pictures for ' + todo.length + ' saves…');
+    for (const i of todo) { await enrich(i.id, i.url, false); n++; if (n % 5 === 0) toast(n + ' of ' + todo.length + ' done'); }
+    backfilling = false; toast('Done. ' + items.filter(x => x.needsImage).length + ' still need a picture: open one to add it by hand.'); render();
+  }
+  /* old links still waiting in the inbox: turn each into a card with its picture, then clear it from the inbox */
+  async function inboxToList() {
+    for (const r of inbox.slice()) {
+      try {
+        const { id } = await db.collection('items').add({ url: r.url, title: host(r.url), path: ['Unsorted'], status: 'want', notes: r.note || '', addedBy: r.addedBy || myId, addedAt: r.addedAt || new Date().toISOString(), via: 'save', fetching: true });
+        await db.doc('inbox/' + r.id).delete();
+        enrich(id, r.url, true);
+      } catch (e) { toast('Could not move ' + host(r.url)); }
+    }
   }
 
   /* ---------- filtering ---------- */
@@ -444,6 +502,9 @@ import { mountTokyo } from './tokyo.js';
     const ib = $('#inboxBtn');
     ib.hidden = !inbox.length;
     ib.textContent = inbox.length + ' to sort';
+    const mi = loaded && canWrite && db ? missingImg().length : 0;
+    $('#imgBtn').hidden = !mi || backfilling;
+    $('#imgBtn').textContent = 'Fetch ' + mi + ' missing pictures';
     renderInbox();
     renderCapture();
     if (tk) { $('#tops').replaceChildren(); $('#subs').replaceChildren(); $('#filters').replaceChildren(); $('#occ').replaceChildren(); mountTokyo($('#body')); }
@@ -481,7 +542,8 @@ import { mountTokyo } from './tokyo.js';
     if (p.hidden) return;
     p.replaceChildren(
       el('h2', { text: 'Waiting to be sorted' }),
-      el('div', { class: 'fine', text: 'Ask Claude to sort the Shortlist. It fetches each page, fills in price and details, and files it under the right category.' }),
+      el('div', { class: 'fine', text: 'Older links saved before pictures were fetched automatically. Add them to the list and each one gets its title and picture.' }),
+      canWrite ? el('button', { type: 'button', class: 'pillbtn', onclick: () => inboxToList(), text: 'Add all ' + inbox.length + ' to the list' }) : null,
       inbox.map(r => el('div', { class: 'irow' },
         el('a', { href: safeUrl(r.url), target: '_blank', rel: 'noopener', text: r.url }),
         r.note ? el('span', { class: 'n', text: r.note }) : null,
@@ -615,6 +677,7 @@ import { mountTokyo } from './tokyo.js';
           i.status === 'done' ? el('span', { class: 'pill dn', text: sl.done }) : null,
           i.status === 'passed' ? el('span', { class: 'pill', text: 'Passed' }) : null,
           i.stock === 'out' ? el('span', { class: 'pill out', text: 'Sold out' }) : null,
+          i.needsImage && !imgOf(i) ? el('span', { class: 'pill', text: 'Add picture' }) : null,
           i.children && i.children.length ? el('span', { class: 'pill', text: 'List · ' + i.children.length }) : null),
         view.compare ? null : starBtn(i),
         view.compare ? el('span', { class: 'tick' + (sel ? ' on' : ''), text: sel ? '✓' : '' }) : null),
@@ -746,6 +809,19 @@ import { mountTokyo } from './tokyo.js';
         el('b', { text: k.title }), el('span', { class: 'fine', text: [(k.facts.find(f => f.startsWith('What: ')) || '').replace('What: ', ''), k.path.slice(1).join(' › ')].filter(Boolean).join(' · ') })))));
   }
 
+  /* change the picture: fetch it again from the link, upload or paste a photo, or paste an image link */
+  function imgTools(i) {
+    const file = el('input', { type: 'file', accept: 'image/*', hidden: true, onchange: e => { const f = e.target.files[0]; if (f) setImage(i.id, f); } });
+    const link = el('input', { type: 'url', id: 'imgLinkIn', placeholder: 'or paste an image link', onkeydown: e => { if (e.key === 'Enter' && safeUrl(e.target.value.trim())) { e.preventDefault(); setImageUrl(i.id, e.target.value.trim()); e.target.value = ''; } } });
+    const has = !!imgOf(i);
+    return el('div', { class: 'imgtools' + (has ? '' : ' need') },
+      !has ? el('div', { class: 'fine', text: i.fetching ? 'Fetching the picture…' : 'No picture found for this link. Add one: upload, paste a screenshot, or paste an image link.' }) : null,
+      el('div', { class: 'row2' },
+        el('button', { type: 'button', class: 'pillbtn', onclick: () => file.click(), text: has ? 'Change picture' : 'Upload picture' }),
+        safeUrl(i.url) && i.src !== 'ig' ? el('button', { type: 'button', class: 'pillbtn', disabled: !!i.fetching, onclick: () => { upd(i.id, { fetching: true }); enrich(i.id, i.url, false); }, text: 'Fetch from link' }) : null,
+        link, file));
+  }
+
   function renderSheet() {
     const i = items.find(x => x.id === view.sheet);
     const s = $('#sheet');
@@ -776,9 +852,11 @@ import { mountTokyo } from './tokyo.js';
           el('button', { class: 'sq', type: 'button', 'aria-label': 'Next item', disabled: idx < 0 || idx >= view.order.length - 1, onclick: () => stepSheet(1), text: '›' }),
           el('button', { class: 'sq', type: 'button', 'aria-label': 'Close', onclick: closeSheet, text: '×' }))),
       el('div', { class: 'shimg' }, vis(i)),
+      canWrite ? imgTools(i) : null,
       el('div', null,
         i.brand ? el('div', { class: 'brand', text: i.brand }) : null,
         el('h2', { text: i.title }),
+        i.summary ? el('p', { class: 'fine', style: 'margin:6px 0 0;line-height:1.45', text: i.summary }) : null,
         i.price != null ? el('div', { style: 'margin-top:8px;font-size:19px;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap' }, priceEl(i), i.stock === 'out' ? el('span', { class: 'pill out', text: 'Sold out' }) : null) : null,
         i.checkedAt ? el('div', { class: 'fine', style: 'margin-top:2px', text: 'Price and stock as of ' + dateOf(i.checkedAt) }) : null),
       safeUrl(i.url) ? el('a', { class: 'go', href: i.url, target: '_blank', rel: 'noopener', text: (i.src === 'ig' ? (i.parent ? 'Open @' + (i.handle || 'profile') + ' on Instagram' : 'Open Instagram post') : 'Open on ' + host(i.url)) + ' ↗' }) : null,
@@ -807,6 +885,16 @@ import { mountTokyo } from './tokyo.js';
   $('#vBrands').onclick = () => { view.tab = 'brands'; view.brand = null; render(); };
   $('#vTokyo').onclick = () => { view.tab = 'tokyo'; render(); window.scrollTo(0, 0); };
   $('#inboxBtn').onclick = () => { view.inboxOpen = !view.inboxOpen; render(); };
+  $('#imgBtn').onclick = () => { backfill(); render(); };
+  /* paste a picture (or a link to one) while a card is open to use it as that card's picture */
+  document.addEventListener('paste', e => {
+    if (!view.sheet || !canWrite) return;
+    const a = document.activeElement; if (a && /^(INPUT|TEXTAREA)$/.test(a.tagName) && a.id !== 'imgLinkIn') return;
+    const f = [...(e.clipboardData && e.clipboardData.files || [])].find(x => /^image\//.test(x.type));
+    if (f) { e.preventDefault(); setImage(view.sheet, f); return; }
+    const t = (e.clipboardData && e.clipboardData.getData('text') || '').trim();
+    if (a && a.id === 'imgLinkIn' && safeUrl(t)) { e.preventDefault(); a.value = ''; setImageUrl(view.sheet, t); }
+  });
   $('#capBtn').onclick = () => { view.capOpen = !view.capOpen; render(); };
   $('#themeBtn').onclick = () => {
     const cur = root.getAttribute('data-theme');
@@ -841,7 +929,7 @@ import { mountTokyo } from './tokyo.js';
     const raw = [q.get('url'), q.get('text'), q.get('title')].filter(Boolean).join(' ');
     if (!raw) return;
     history.replaceState(null, '', location.pathname);
-    if (db && canWrite) await addLinks(raw, q.get('title') && q.get('url') ? q.get('title') : '');
+    if (db && canWrite) await addLinks(raw, '', q.get('title') && q.get('url') ? q.get('title') : '');
   }
   render();
   if (db) {

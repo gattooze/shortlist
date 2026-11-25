@@ -109,3 +109,26 @@ export async function boot() {
   const user = { id: async () => session.user.id, can: async () => true, email: session.user.email, signOut: async () => { await sb.auth.signOut(); location.reload(); } };
   return { db, user, id: session.user.id };
 }
+
+/* previews: the `preview` Edge Function reads a link's title and image and copies the image into the `thumbs` bucket */
+export async function preview(body) {
+  const { data, error } = await sb.functions.invoke('preview', { body });
+  if (error) throw error;
+  return data || {};
+}
+/* a photo the person pasted or picked: shrink it in the browser, then store it in `thumbs` */
+export async function uploadImage(file) {
+  let blob = file;
+  try {
+    const bmp = await createImageBitmap(file);
+    const k = Math.min(1, 1400 / Math.max(bmp.width, bmp.height));
+    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
+    c.getContext('2d').drawImage(bmp, 0, 0, c.width, c.height);
+    blob = await new Promise(r => c.toBlob(r, 'image/jpeg', 0.86)) || file;
+  } catch (e) { /* formats the browser cannot decode go up as they are */ }
+  const ext = blob.type === 'image/jpeg' ? 'jpg' : (blob.type.split('/')[1] || 'jpg');
+  const path = 'u/' + (crypto.randomUUID ? crypto.randomUUID() : Date.now() + '-' + Math.random().toString(36).slice(2)) + '.' + ext;
+  const { error } = await sb.storage.from('thumbs').upload(path, blob, { contentType: blob.type || 'image/jpeg', cacheControl: '31536000', upsert: false });
+  if (error) throw error;
+  return sb.storage.from('thumbs').getPublicUrl(path).data.publicUrl;
+}
